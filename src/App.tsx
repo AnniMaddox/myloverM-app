@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
+import WorldbookPage from './pages/WorldbookPage';
 import './index.css';
 
 type AppId = 'chat' | 'memory' | 'settings' | 'worldbook';
@@ -44,7 +45,11 @@ export default function App() {
         <ChatPage onBack={() => setActiveApp(null)} />
       )}
 
-      {activeApp && activeApp !== 'chat' && (
+      {activeApp === 'worldbook' && (
+        <WorldbookPage onBack={() => setActiveApp(null)} />
+      )}
+
+      {activeApp && activeApp !== 'chat' && activeApp !== 'worldbook' && (
         <PlaceholderPage
           title={appTitles[activeApp]}
           onBack={() => setActiveApp(null)}

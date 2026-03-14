@@ -856,4 +856,163 @@ Error generating stack: `+e.message+`
   .chat-messages { padding: 16px 12px 12px; }
   .chat-composer  { padding: 8px 12px 16px; }
 }
-`;function kt({title:e,onBack:t}){return(0,d.jsxs)(`div`,{className:`absolute inset-0 z-50 flex flex-col`,style:{background:`#1c1c1e`},children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3 px-4 pt-14 pb-4`,children:[(0,d.jsx)(`button`,{onClick:t,className:`w-8 h-8 rounded-full flex items-center justify-center text-white`,style:{background:`rgba(255,255,255,0.15)`},children:(0,d.jsx)(`span`,{style:{transform:`translateY(-1px)`,display:`block`},children:`‹`})}),(0,d.jsx)(`span`,{className:`text-white text-lg font-medium`,children:e})]}),(0,d.jsx)(`div`,{className:`flex-1 flex items-center justify-center`,children:(0,d.jsx)(`p`,{className:`text-white/40 text-sm`,children:`Coming soon`})})]})}function At(){let[e,t]=(0,l.useState)(null);return(0,d.jsxs)(`div`,{className:`relative w-full h-full overflow-hidden`,style:{background:`#000`},children:[(0,d.jsx)(p,{onOpenApp:t}),e===`chat`&&(0,d.jsx)(Dt,{onBack:()=>t(null)}),e&&e!==`chat`&&(0,d.jsx)(kt,{title:{chat:`聊天`,memory:`記憶室`,settings:`設定`,worldbook:`世界書`}[e],onBack:()=>t(null)})]})}(0,c.createRoot)(document.getElementById(`root`)).render((0,d.jsx)(l.StrictMode,{children:(0,d.jsx)(At,{})}));
+`,kt={0:`系統提示詞之前`,1:`系統提示詞之後（預設）`,2:`記憶之後`,3:`對話之前`};function At(){return(localStorage.getItem(`myloverM-api-url`)||``).replace(/\/+$/,``)}async function jt(e,t){let n=At();if(!n)throw Error(`請先在設定中填入後端 URL`);let r=await fetch(n+e,t);if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}var Mt={title:``,content:``,keywords:``,position:1,always_on:!1,enabled:!0,priority:50};function Nt({onBack:e}){let[t,n]=(0,l.useState)([]),[r,i]=(0,l.useState)(!0),[a,o]=(0,l.useState)(``),[s,c]=(0,l.useState)(`list`),[u,f]=(0,l.useState)(null),[p,m]=(0,l.useState)({...Mt}),[h,g]=(0,l.useState)(!1),_=(0,l.useCallback)(async()=>{i(!0),o(``);try{n((await jt(`/api/worldbook`)).entries||[])}catch(e){o(e instanceof Error?e.message:String(e))}finally{i(!1)}},[]);(0,l.useEffect)(()=>{_()},[_]);function v(){m({...Mt}),f(null),c(`new`)}function y(e){m({title:e.title,content:e.content,keywords:e.keywords,position:e.position,always_on:e.always_on,enabled:e.enabled,priority:e.priority}),f(e),c(`edit`)}async function b(){if(!(!p.title.trim()||!p.content.trim())){g(!0);try{s===`new`?await jt(`/api/worldbook`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(p)}):u&&await jt(`/api/worldbook/${u.id}`,{method:`PUT`,headers:{"Content-Type":`application/json`},body:JSON.stringify(p)}),await _(),c(`list`)}catch(e){o(e instanceof Error?e.message:String(e))}finally{g(!1)}}}async function x(e,t){t.stopPropagation();try{await jt(`/api/worldbook/${e}/toggle`,{method:`PATCH`}),n(t=>t.map(t=>t.id===e?{...t,enabled:!t.enabled}:t))}catch(e){o(e instanceof Error?e.message:String(e))}}async function S(e){if(confirm(`確定刪除這個條目？`))try{await jt(`/api/worldbook/${e}`,{method:`DELETE`}),n(t=>t.filter(t=>t.id!==e)),c(`list`)}catch(e){o(e instanceof Error?e.message:String(e))}}let C=s===`edit`||s===`new`;return(0,d.jsxs)(`div`,{className:`absolute inset-0 z-50 flex flex-col`,style:{background:`var(--bg-base)`},children:[(0,d.jsx)(`style`,{children:Pt}),(0,d.jsxs)(`div`,{className:`wb-header`,children:[(0,d.jsx)(`button`,{className:`wb-back`,onClick:C?()=>c(`list`):e,children:`‹`}),(0,d.jsx)(`span`,{className:`wb-title`,children:C?s===`new`?`新增條目`:`編輯條目`:`世界書`}),!C&&(0,d.jsx)(`button`,{className:`wb-add-btn`,onClick:v,children:`＋`}),C&&(0,d.jsx)(`button`,{className:`wb-save-btn`,onClick:b,disabled:h,children:h?`儲存中...`:`儲存`})]}),a&&(0,d.jsxs)(`div`,{className:`wb-error`,onClick:()=>o(``),children:[a,` ✕`]}),s===`list`&&(0,d.jsx)(`div`,{className:`wb-list`,children:r?(0,d.jsx)(`div`,{className:`wb-empty`,children:`載入中...`}):t.length===0?(0,d.jsx)(`div`,{className:`wb-empty`,children:`還沒有條目。點右上角 ＋ 新增。`}):t.map(e=>(0,d.jsxs)(`div`,{className:`wb-item${e.enabled?``:` wb-item--disabled`}`,onClick:()=>y(e),children:[(0,d.jsxs)(`div`,{className:`wb-item-main`,children:[(0,d.jsx)(`div`,{className:`wb-item-title`,children:e.title}),(0,d.jsxs)(`div`,{className:`wb-item-meta`,children:[kt[e.position]||`位置 ${e.position}`,e.always_on?` · 常駐`:e.keywords?` · 關鍵字: ${e.keywords}`:``]})]}),(0,d.jsx)(`button`,{className:`wb-toggle${e.enabled?` wb-toggle--on`:``}`,onClick:t=>x(e.id,t),"aria-label":e.enabled?`停用`:`啟用`})]},e.id))}),C&&(0,d.jsxs)(`div`,{className:`wb-form`,children:[(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`標題`}),(0,d.jsx)(`input`,{className:`wb-input`,value:p.title,onChange:e=>m(t=>({...t,title:e.target.value})),placeholder:`條目名稱（自己看的）`})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`內容`}),(0,d.jsx)(`textarea`,{className:`wb-textarea`,value:p.content,onChange:e=>m(t=>({...t,content:e.target.value})),placeholder:`注入 system prompt 的實際文字...`,rows:8})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`插入位置`}),(0,d.jsx)(`select`,{className:`wb-select`,value:p.position,onChange:e=>m(t=>({...t,position:Number(e.target.value)})),children:Object.entries(kt).map(([e,t])=>(0,d.jsx)(`option`,{value:e,children:t},e))})]}),(0,d.jsxs)(`div`,{className:`wb-field wb-field--row`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`常駐（always_on）`}),(0,d.jsx)(`button`,{className:`wb-toggle${p.always_on?` wb-toggle--on`:``}`,onClick:()=>m(e=>({...e,always_on:!e.always_on}))})]}),!p.always_on&&(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`關鍵字（逗號分隔，任一命中即觸發）`}),(0,d.jsx)(`input`,{className:`wb-input`,value:p.keywords,onChange:e=>m(t=>({...t,keywords:e.target.value})),placeholder:`關鍵字一, 關鍵字二, keyword`})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`優先度（數字小 = 優先）`}),(0,d.jsx)(`input`,{className:`wb-input`,type:`number`,value:p.priority,onChange:e=>m(t=>({...t,priority:Number(e.target.value)})),min:0,max:999})]}),(0,d.jsxs)(`div`,{className:`wb-field wb-field--row`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`啟用`}),(0,d.jsx)(`button`,{className:`wb-toggle${p.enabled?` wb-toggle--on`:``}`,onClick:()=>m(e=>({...e,enabled:!e.enabled}))})]}),s===`edit`&&u&&(0,d.jsx)(`button`,{className:`wb-delete-btn`,onClick:()=>S(u.id),children:`刪除此條目`})]})]})}var Pt=`
+.wb-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  height: 56px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+.wb-back {
+  font-size: 22px;
+  color: var(--accent);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+}
+.wb-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.wb-add-btn {
+  font-size: 20px;
+  color: var(--accent);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+.wb-save-btn {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+}
+.wb-save-btn:disabled { opacity: 0.4; }
+
+.wb-error {
+  padding: 10px 16px;
+  background: rgba(217,112,112,0.12);
+  color: var(--color-error);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wb-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.wb-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.wb-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.12s;
+  margin-bottom: 2px;
+}
+.wb-item:hover { background: var(--bg-hover); }
+.wb-item--disabled { opacity: 0.45; }
+.wb-item-main { flex: 1; min-width: 0; }
+.wb-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Toggle switch */
+.wb-toggle {
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s;
+}
+.wb-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.wb-toggle--on { background: var(--accent); }
+.wb-toggle--on::after { transform: translateX(18px); }
+
+.wb-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.wb-field { display: flex; flex-direction: column; gap: 6px; }
+.wb-field--row { flex-direction: row; align-items: center; justify-content: space-between; }
+.wb-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.wb-input, .wb-select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  width: 100%;
+}
+.wb-input:focus, .wb-select:focus { border-color: var(--accent-dim); outline: none; }
+.wb-textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  width: 100%;
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.6;
+}
+.wb-textarea:focus { border-color: var(--accent-dim); outline: none; }
+.wb-select { appearance: none; }
+.wb-delete-btn {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  background: rgba(217,112,112,0.08);
+  border: 1px solid rgba(217,112,112,0.2);
+  font-size: 14px;
+  text-align: center;
+}
+`;function Ft({title:e,onBack:t}){return(0,d.jsxs)(`div`,{className:`absolute inset-0 z-50 flex flex-col`,style:{background:`#1c1c1e`},children:[(0,d.jsxs)(`div`,{className:`flex items-center gap-3 px-4 pt-14 pb-4`,children:[(0,d.jsx)(`button`,{onClick:t,className:`w-8 h-8 rounded-full flex items-center justify-center text-white`,style:{background:`rgba(255,255,255,0.15)`},children:(0,d.jsx)(`span`,{style:{transform:`translateY(-1px)`,display:`block`},children:`‹`})}),(0,d.jsx)(`span`,{className:`text-white text-lg font-medium`,children:e})]}),(0,d.jsx)(`div`,{className:`flex-1 flex items-center justify-center`,children:(0,d.jsx)(`p`,{className:`text-white/40 text-sm`,children:`Coming soon`})})]})}function It(){let[e,t]=(0,l.useState)(null);return(0,d.jsxs)(`div`,{className:`relative w-full h-full overflow-hidden`,style:{background:`#000`},children:[(0,d.jsx)(p,{onOpenApp:t}),e===`chat`&&(0,d.jsx)(Dt,{onBack:()=>t(null)}),e===`worldbook`&&(0,d.jsx)(Nt,{onBack:()=>t(null)}),e&&e!==`chat`&&e!==`worldbook`&&(0,d.jsx)(Ft,{title:{chat:`聊天`,memory:`記憶室`,settings:`設定`,worldbook:`世界書`}[e],onBack:()=>t(null)})]})}(0,c.createRoot)(document.getElementById(`root`)).render((0,d.jsx)(l.StrictMode,{children:(0,d.jsx)(It,{})}));
