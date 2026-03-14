@@ -2,6 +2,7 @@ import { useState } from 'react';
 import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import WorldbookPage from './pages/WorldbookPage';
+import MemoryPage from './pages/MemoryPage';
 import './index.css';
 
 type AppId = 'chat' | 'memory' | 'settings' | 'worldbook';
@@ -49,7 +50,11 @@ export default function App() {
         <WorldbookPage onBack={() => setActiveApp(null)} />
       )}
 
-      {activeApp && activeApp !== 'chat' && activeApp !== 'worldbook' && (
+      {activeApp === 'memory' && (
+        <MemoryPage onBack={() => setActiveApp(null)} />
+      )}
+
+      {activeApp && activeApp !== 'chat' && activeApp !== 'worldbook' && activeApp !== 'memory' && (
         <PlaceholderPage
           title={appTitles[activeApp]}
           onBack={() => setActiveApp(null)}
