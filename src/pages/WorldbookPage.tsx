@@ -49,6 +49,8 @@ const EMPTY_ENTRY: Omit<PersonaEntry, 'id' | 'created_at' | 'updated_at'> = {
   priority: 50,
 };
 
+const BACKEND_URL_KEY = 'myloverM-api-url';
+
 export default function WorldbookPage({ onBack }: WorldbookPageProps) {
   const [entries, setEntries] = useState<PersonaEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +59,16 @@ export default function WorldbookPage({ onBack }: WorldbookPageProps) {
   const [editing, setEditing] = useState<PersonaEntry | null>(null);
   const [form, setForm] = useState({ ...EMPTY_ENTRY });
   const [saving, setSaving] = useState(false);
+  const [hasUrl, setHasUrl] = useState(!!getApiBase());
+  const [urlInput, setUrlInput] = useState('');
+
+  function saveUrl() {
+    const v = urlInput.trim().replace(/\/$/, '');
+    if (!v) return;
+    try { localStorage.setItem(BACKEND_URL_KEY, v); } catch { /* ignore */ }
+    setUrlInput('');
+    setHasUrl(true);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,6 +171,23 @@ export default function WorldbookPage({ onBack }: WorldbookPageProps) {
           </button>
         )}
       </div>
+
+      {!hasUrl && (
+        <div className="wb-nourl">
+          <div style={{ marginBottom: 8 }}>尚未設定後端 URL，請貼上你的 Railway 網址：</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              className="wb-input"
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveUrl()}
+              placeholder="https://xxxx.up.railway.app"
+            />
+            <button className="wb-save-btn" onClick={saveUrl}>儲存</button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="wb-error" onClick={() => setError('')}>{error} ✕</div>
@@ -323,6 +352,27 @@ const WB_STYLES = `
   background: var(--accent-bg);
 }
 .wb-save-btn:disabled { opacity: 0.4; }
+
+.wb-nourl {
+  padding: 12px 16px;
+  background: rgba(217,96,90,0.1);
+  border-bottom: 1px solid rgba(217,96,90,0.22);
+  color: #e8908a;
+  font-size: 14px;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.wb-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.07);
+  color: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.wb-input:focus { border-color: var(--accent-dim); }
 
 .wb-error {
   padding: 10px 16px;
