@@ -856,7 +856,7 @@ Error generating stack: `+e.message+`
   .chat-messages { padding: 16px 12px 12px; }
   .chat-composer  { padding: 8px 12px 16px; }
 }
-`,Ot={0:`系統提示詞之前`,1:`系統提示詞之後（預設）`,2:`記憶之後`,3:`對話之前`};function kt(){return(localStorage.getItem(`myloverM-api-url`)||``).replace(/\/+$/,``)}async function At(e,t){let n=kt();if(!n)throw Error(`請先在設定中填入後端 URL`);let r=await fetch(n+e,t);if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}var jt={title:``,content:``,keywords:``,position:1,always_on:!1,enabled:!0,priority:50},Mt=`myloverM-api-url`;function Nt({onBack:e}){let[t,n]=(0,l.useState)([]),[r,i]=(0,l.useState)(!0),[a,o]=(0,l.useState)(``),[s,c]=(0,l.useState)(`list`),[u,f]=(0,l.useState)(null),[p,m]=(0,l.useState)({...jt}),[h,g]=(0,l.useState)(!1),[_,v]=(0,l.useState)(!!kt()),[y,b]=(0,l.useState)(``);function x(){let e=y.trim().replace(/\/$/,``);if(e){try{localStorage.setItem(Mt,e)}catch{}b(``),v(!0)}}let S=(0,l.useCallback)(async()=>{i(!0),o(``);try{n((await At(`/api/worldbook`)).entries||[])}catch(e){o(e instanceof Error?e.message:String(e))}finally{i(!1)}},[]);(0,l.useEffect)(()=>{S()},[S]);function C(){m({...jt}),f(null),c(`new`)}function w(e){m({title:e.title,content:e.content,keywords:e.keywords,position:e.position,always_on:e.always_on,enabled:e.enabled,priority:e.priority}),f(e),c(`edit`)}async function T(){if(!(!p.title.trim()||!p.content.trim())){g(!0);try{s===`new`?await At(`/api/worldbook`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(p)}):u&&await At(`/api/worldbook/${u.id}`,{method:`PUT`,headers:{"Content-Type":`application/json`},body:JSON.stringify(p)}),await S(),c(`list`)}catch(e){o(e instanceof Error?e.message:String(e))}finally{g(!1)}}}async function E(e,t){t.stopPropagation();try{await At(`/api/worldbook/${e}/toggle`,{method:`PATCH`}),n(t=>t.map(t=>t.id===e?{...t,enabled:!t.enabled}:t))}catch(e){o(e instanceof Error?e.message:String(e))}}async function D(e){if(confirm(`確定刪除這個條目？`))try{await At(`/api/worldbook/${e}`,{method:`DELETE`}),n(t=>t.filter(t=>t.id!==e)),c(`list`)}catch(e){o(e instanceof Error?e.message:String(e))}}let O=s===`edit`||s===`new`;return(0,d.jsxs)(`div`,{className:`absolute inset-0 z-50 flex flex-col`,style:{background:`var(--bg-base)`},children:[(0,d.jsx)(`style`,{children:Pt}),(0,d.jsxs)(`div`,{className:`wb-header`,children:[(0,d.jsx)(`button`,{className:`wb-back`,onClick:O?()=>c(`list`):e,children:`‹`}),(0,d.jsx)(`span`,{className:`wb-title`,children:O?s===`new`?`新增條目`:`編輯條目`:`世界書`}),!O&&(0,d.jsx)(`button`,{className:`wb-add-btn`,onClick:C,children:`＋`}),O&&(0,d.jsx)(`button`,{className:`wb-save-btn`,onClick:T,disabled:h,children:h?`儲存中...`:`儲存`})]}),!_&&(0,d.jsxs)(`div`,{className:`wb-nourl`,children:[(0,d.jsx)(`div`,{style:{marginBottom:8},children:`尚未設定後端 URL，請貼上你的 Railway 網址：`}),(0,d.jsxs)(`div`,{style:{display:`flex`,gap:8},children:[(0,d.jsx)(`input`,{type:`text`,className:`wb-input`,value:y,onChange:e=>b(e.target.value),onKeyDown:e=>e.key===`Enter`&&x(),placeholder:`https://xxxx.up.railway.app`}),(0,d.jsx)(`button`,{className:`wb-save-btn`,onClick:x,children:`儲存`})]})]}),a&&(0,d.jsxs)(`div`,{className:`wb-error`,onClick:()=>o(``),children:[a,` ✕`]}),s===`list`&&(0,d.jsx)(`div`,{className:`wb-list`,children:r?(0,d.jsx)(`div`,{className:`wb-empty`,children:`載入中...`}):t.length===0?(0,d.jsx)(`div`,{className:`wb-empty`,children:`還沒有條目。點右上角 ＋ 新增。`}):t.map(e=>(0,d.jsxs)(`div`,{className:`wb-item${e.enabled?``:` wb-item--disabled`}`,onClick:()=>w(e),children:[(0,d.jsxs)(`div`,{className:`wb-item-main`,children:[(0,d.jsx)(`div`,{className:`wb-item-title`,children:e.title}),(0,d.jsxs)(`div`,{className:`wb-item-meta`,children:[Ot[e.position]||`位置 ${e.position}`,e.always_on?` · 常駐`:e.keywords?` · 關鍵字: ${e.keywords}`:``]})]}),(0,d.jsx)(`button`,{className:`wb-toggle${e.enabled?` wb-toggle--on`:``}`,onClick:t=>E(e.id,t),"aria-label":e.enabled?`停用`:`啟用`})]},e.id))}),O&&(0,d.jsxs)(`div`,{className:`wb-form`,children:[(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`標題`}),(0,d.jsx)(`input`,{className:`wb-input`,value:p.title,onChange:e=>m(t=>({...t,title:e.target.value})),placeholder:`條目名稱（自己看的）`})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`內容`}),(0,d.jsx)(`textarea`,{className:`wb-textarea`,value:p.content,onChange:e=>m(t=>({...t,content:e.target.value})),placeholder:`注入 system prompt 的實際文字...`,rows:8})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`插入位置`}),(0,d.jsx)(`select`,{className:`wb-select`,value:p.position,onChange:e=>m(t=>({...t,position:Number(e.target.value)})),children:Object.entries(Ot).map(([e,t])=>(0,d.jsx)(`option`,{value:e,children:t},e))})]}),(0,d.jsxs)(`div`,{className:`wb-field wb-field--row`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`常駐（always_on）`}),(0,d.jsx)(`button`,{className:`wb-toggle${p.always_on?` wb-toggle--on`:``}`,onClick:()=>m(e=>({...e,always_on:!e.always_on}))})]}),!p.always_on&&(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`關鍵字（逗號分隔，任一命中即觸發）`}),(0,d.jsx)(`input`,{className:`wb-input`,value:p.keywords,onChange:e=>m(t=>({...t,keywords:e.target.value})),placeholder:`關鍵字一, 關鍵字二, keyword`})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`優先度（數字小 = 優先）`}),(0,d.jsx)(`input`,{className:`wb-input`,type:`number`,value:p.priority,onChange:e=>m(t=>({...t,priority:Number(e.target.value)})),min:0,max:999})]}),(0,d.jsxs)(`div`,{className:`wb-field wb-field--row`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`啟用`}),(0,d.jsx)(`button`,{className:`wb-toggle${p.enabled?` wb-toggle--on`:``}`,onClick:()=>m(e=>({...e,enabled:!e.enabled}))})]}),s===`edit`&&u&&(0,d.jsx)(`button`,{className:`wb-delete-btn`,onClick:()=>D(u.id),children:`刪除此條目`})]})]})}var Pt=`
+`,Ot={0:`系統提示詞之前`,1:`系統提示詞之後（預設）`,2:`記憶之後`,3:`對話之前`};function kt(){return(localStorage.getItem(`myloverM-api-url`)||``).replace(/\/+$/,``)}async function At(e,t){let n=kt();if(!n)throw Error(`請先在設定中填入後端 URL`);let r=await fetch(n+e,t);if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}var jt={title:``,content:``,keywords:``,position:1,always_on:!1,enabled:!0,priority:50},Mt=`myloverM-api-url`;function Nt({onBack:e}){let[t,n]=(0,l.useState)([]),[r,i]=(0,l.useState)(!0),[a,o]=(0,l.useState)(``),[s,c]=(0,l.useState)(`list`),[u,f]=(0,l.useState)(null),[p,m]=(0,l.useState)({...jt}),[h,g]=(0,l.useState)(!1),[_,v]=(0,l.useState)(!!kt()),[y,b]=(0,l.useState)(``);function x(){let e=y.trim().replace(/\/$/,``);if(e){try{localStorage.setItem(Mt,e)}catch{}b(``),v(!0)}}let S=(0,l.useCallback)(async()=>{i(!0),o(``);try{n((await At(`/api/worldbook`)).entries||[])}catch(e){o(e instanceof Error?e.message:String(e))}finally{i(!1)}},[]);(0,l.useEffect)(()=>{S()},[S]);function C(){m({...jt}),f(null),c(`new`)}function w(e){m({title:e.title,content:e.content,keywords:e.keywords,position:e.position,always_on:e.always_on,enabled:e.enabled,priority:e.priority}),f(e),c(`edit`)}async function T(){if(!(!p.title.trim()||!p.content.trim())){g(!0);try{s===`new`?await At(`/api/worldbook`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(p)}):u&&await At(`/api/worldbook/${u.id}`,{method:`PUT`,headers:{"Content-Type":`application/json`},body:JSON.stringify(p)}),await S(),c(`list`)}catch(e){o(e instanceof Error?e.message:String(e))}finally{g(!1)}}}async function E(e,t){t.stopPropagation();try{await At(`/api/worldbook/${e}/toggle`,{method:`PATCH`}),n(t=>t.map(t=>t.id===e?{...t,enabled:!t.enabled}:t))}catch(e){o(e instanceof Error?e.message:String(e))}}async function D(e){if(confirm(`確定刪除這個條目？`))try{await At(`/api/worldbook/${e}`,{method:`DELETE`}),n(t=>t.filter(t=>t.id!==e)),c(`list`)}catch(e){o(e instanceof Error?e.message:String(e))}}let O=s===`edit`||s===`new`;return(0,d.jsxs)(`div`,{className:`absolute inset-0 z-50 flex flex-col`,style:{background:`var(--bg-base)`},children:[(0,d.jsx)(`style`,{children:Pt}),(0,d.jsxs)(`div`,{className:`wb-header`,children:[(0,d.jsx)(`button`,{className:`wb-back`,onClick:O?()=>c(`list`):e,children:`‹`}),(0,d.jsx)(`span`,{className:`wb-title`,children:O?s===`new`?`新增條目`:`編輯條目`:`世界書`}),!O&&(0,d.jsx)(`button`,{className:`wb-add-btn`,onClick:C,children:`＋`}),O&&(0,d.jsx)(`button`,{className:`wb-save-btn`,onClick:T,disabled:h,children:h?`儲存中...`:`儲存`})]}),!_&&(0,d.jsxs)(`div`,{className:`wb-nourl`,children:[(0,d.jsx)(`div`,{style:{marginBottom:8},children:`尚未設定後端 URL，請貼上你的 Railway 網址：`}),(0,d.jsxs)(`div`,{style:{display:`flex`,gap:8},children:[(0,d.jsx)(`input`,{type:`text`,className:`wb-input`,value:y,onChange:e=>b(e.target.value),onKeyDown:e=>e.key===`Enter`&&x(),placeholder:`https://xxxx.up.railway.app`}),(0,d.jsx)(`button`,{className:`wb-save-btn`,onClick:x,children:`儲存`})]})]}),a&&(0,d.jsxs)(`div`,{className:`wb-error`,onClick:()=>o(``),children:[a,` ✕`]}),s===`list`&&(0,d.jsx)(`div`,{className:`wb-list`,children:r?(0,d.jsx)(`div`,{className:`wb-empty`,children:`載入中...`}):t.length===0?(0,d.jsx)(`div`,{className:`wb-empty`,children:`還沒有條目。點右上角 ＋ 新增。`}):t.map(e=>(0,d.jsxs)(`div`,{className:`wb-item${e.enabled?` wb-item--on`:``}`,onClick:t=>E(e.id,t),children:[(0,d.jsx)(`div`,{className:`wb-check${e.enabled?` wb-check--on`:``}`,children:e.enabled&&(0,d.jsx)(`span`,{children:`✓`})}),(0,d.jsxs)(`div`,{className:`wb-item-main`,children:[(0,d.jsx)(`div`,{className:`wb-item-title`,children:e.title}),(0,d.jsxs)(`div`,{className:`wb-item-meta`,children:[e.always_on?`常駐`:e.keywords?`🔑 ${e.keywords}`:`無關鍵字`,` · `,Ot[e.position]||`位置 ${e.position}`]})]}),(0,d.jsx)(`button`,{className:`wb-edit-btn`,onClick:t=>{t.stopPropagation(),w(e)},"aria-label":`編輯`,children:`✏`})]},e.id))}),O&&(0,d.jsxs)(`div`,{className:`wb-form`,children:[(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`標題`}),(0,d.jsx)(`input`,{className:`wb-input`,value:p.title,onChange:e=>m(t=>({...t,title:e.target.value})),placeholder:`條目名稱（自己看的）`})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`內容`}),(0,d.jsx)(`textarea`,{className:`wb-textarea`,value:p.content,onChange:e=>m(t=>({...t,content:e.target.value})),placeholder:`注入 system prompt 的實際文字...`,rows:8})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`插入位置`}),(0,d.jsx)(`select`,{className:`wb-select`,value:p.position,onChange:e=>m(t=>({...t,position:Number(e.target.value)})),children:Object.entries(Ot).map(([e,t])=>(0,d.jsx)(`option`,{value:e,children:t},e))})]}),(0,d.jsxs)(`div`,{className:`wb-field wb-field--row`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`常駐（always_on）`}),(0,d.jsx)(`button`,{className:`wb-toggle${p.always_on?` wb-toggle--on`:``}`,onClick:()=>m(e=>({...e,always_on:!e.always_on}))})]}),!p.always_on&&(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`關鍵字（逗號分隔，任一命中即觸發）`}),(0,d.jsx)(`input`,{className:`wb-input`,value:p.keywords,onChange:e=>m(t=>({...t,keywords:e.target.value})),placeholder:`關鍵字一, 關鍵字二, keyword`})]}),(0,d.jsxs)(`div`,{className:`wb-field`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`優先度（數字小 = 優先）`}),(0,d.jsx)(`input`,{className:`wb-input`,type:`number`,value:p.priority,onChange:e=>m(t=>({...t,priority:Number(e.target.value)})),min:0,max:999})]}),(0,d.jsxs)(`div`,{className:`wb-field wb-field--row`,children:[(0,d.jsx)(`label`,{className:`wb-label`,children:`啟用`}),(0,d.jsx)(`button`,{className:`wb-toggle${p.enabled?` wb-toggle--on`:``}`,onClick:()=>m(e=>({...e,enabled:!e.enabled}))})]}),s===`edit`&&u&&(0,d.jsx)(`button`,{className:`wb-delete-btn`,onClick:()=>D(u.id),children:`刪除此條目`})]})]})}var Pt=`
 .wb-header {
   display: flex;
   align-items: center;
@@ -941,14 +941,18 @@ Error generating stack: `+e.message+`
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.12s;
   margin-bottom: 2px;
+  border: 1px solid transparent;
 }
 .wb-item:hover { background: var(--bg-hover); }
-.wb-item--disabled { opacity: 0.45; }
+.wb-item--on {
+  background: var(--accent-bg);
+  border-color: rgba(212,164,106,0.18);
+}
 .wb-item-main { flex: 1; min-width: 0; }
 .wb-item-title {
   font-size: 14px;
@@ -958,6 +962,7 @@ Error generating stack: `+e.message+`
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.wb-item--on .wb-item-title { color: var(--accent); }
 .wb-item-meta {
   font-size: 11px;
   color: var(--text-muted);
@@ -967,29 +972,37 @@ Error generating stack: `+e.message+`
   text-overflow: ellipsis;
 }
 
-/* Toggle switch */
-.wb-toggle {
+/* 勾選圈 */
+.wb-check {
   flex-shrink: 0;
-  width: 44px;
-  height: 26px;
-  border-radius: 13px;
-  background: var(--border);
-  position: relative;
-  transition: background 0.2s;
-}
-.wb-toggle::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
+  width: 22px; height: 22px;
   border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s;
+  border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  color: transparent;
+  transition: all 0.15s;
 }
-.wb-toggle--on { background: var(--accent); }
-.wb-toggle--on::after { transform: translateX(18px); }
+.wb-check--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1712;
+  font-weight: 700;
+}
+
+/* 編輯按鈕 */
+.wb-edit-btn {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.wb-item:hover .wb-edit-btn { opacity: 1; }
+.wb-edit-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 
 .wb-form {
   flex: 1;

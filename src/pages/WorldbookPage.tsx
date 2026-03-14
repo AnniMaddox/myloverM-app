@@ -204,21 +204,25 @@ export default function WorldbookPage({ onBack }: WorldbookPageProps) {
             entries.map(entry => (
               <div
                 key={entry.id}
-                className={`wb-item${entry.enabled ? '' : ' wb-item--disabled'}`}
-                onClick={() => openEdit(entry)}
+                className={`wb-item${entry.enabled ? ' wb-item--on' : ''}`}
+                onClick={(e) => handleToggle(entry.id, e)}
               >
+                {/* 勾選圈 */}
+                <div className={`wb-check${entry.enabled ? ' wb-check--on' : ''}`}>
+                  {entry.enabled && <span>✓</span>}
+                </div>
                 <div className="wb-item-main">
                   <div className="wb-item-title">{entry.title}</div>
                   <div className="wb-item-meta">
-                    {POSITION_LABELS[entry.position] || `位置 ${entry.position}`}
-                    {entry.always_on ? ' · 常駐' : entry.keywords ? ` · 關鍵字: ${entry.keywords}` : ''}
+                    {entry.always_on ? '常駐' : entry.keywords ? `🔑 ${entry.keywords}` : '無關鍵字'}
+                    {' · '}{POSITION_LABELS[entry.position] || `位置 ${entry.position}`}
                   </div>
                 </div>
                 <button
-                  className={`wb-toggle${entry.enabled ? ' wb-toggle--on' : ''}`}
-                  onClick={(e) => handleToggle(entry.id, e)}
-                  aria-label={entry.enabled ? '停用' : '啟用'}
-                />
+                  className="wb-edit-btn"
+                  onClick={(e) => { e.stopPropagation(); openEdit(entry) }}
+                  aria-label="編輯"
+                >✏</button>
               </div>
             ))
           )}
@@ -398,14 +402,18 @@ const WB_STYLES = `
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.12s;
   margin-bottom: 2px;
+  border: 1px solid transparent;
 }
 .wb-item:hover { background: var(--bg-hover); }
-.wb-item--disabled { opacity: 0.45; }
+.wb-item--on {
+  background: var(--accent-bg);
+  border-color: rgba(212,164,106,0.18);
+}
 .wb-item-main { flex: 1; min-width: 0; }
 .wb-item-title {
   font-size: 14px;
@@ -415,6 +423,7 @@ const WB_STYLES = `
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.wb-item--on .wb-item-title { color: var(--accent); }
 .wb-item-meta {
   font-size: 11px;
   color: var(--text-muted);
@@ -424,29 +433,37 @@ const WB_STYLES = `
   text-overflow: ellipsis;
 }
 
-/* Toggle switch */
-.wb-toggle {
+/* 勾選圈 */
+.wb-check {
   flex-shrink: 0;
-  width: 44px;
-  height: 26px;
-  border-radius: 13px;
-  background: var(--border);
-  position: relative;
-  transition: background 0.2s;
-}
-.wb-toggle::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
+  width: 22px; height: 22px;
   border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s;
+  border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  color: transparent;
+  transition: all 0.15s;
 }
-.wb-toggle--on { background: var(--accent); }
-.wb-toggle--on::after { transform: translateX(18px); }
+.wb-check--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1712;
+  font-weight: 700;
+}
+
+/* 編輯按鈕 */
+.wb-edit-btn {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.wb-item:hover .wb-edit-btn { opacity: 1; }
+.wb-edit-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 
 .wb-form {
   flex: 1;
