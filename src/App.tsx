@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import HomePage from './pages/HomePage';
+import ChatPage from './pages/ChatPage';
 import './index.css';
 
 type AppId = 'chat' | 'memory' | 'settings' | 'worldbook';
@@ -39,7 +40,11 @@ export default function App() {
     <div className="relative w-full h-full overflow-hidden" style={{ background: '#000' }}>
       <HomePage onOpenApp={setActiveApp} />
 
-      {activeApp && (
+      {activeApp === 'chat' && (
+        <ChatPage onBack={() => setActiveApp(null)} />
+      )}
+
+      {activeApp && activeApp !== 'chat' && (
         <PlaceholderPage
           title={appTitles[activeApp]}
           onBack={() => setActiveApp(null)}
