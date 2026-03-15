@@ -527,12 +527,30 @@ export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onI
 
             {/* 上下文截斷 */}
             <div>
-              <label className="sp-label">
-                上下文輪數&nbsp;
-                <span style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-                  {contextTurns === 0 ? '不限' : `${contextTurns} 輪`}
-                </span>
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label className="sp-label" style={{ margin: 0 }}>上下文輪數</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={999}
+                  value={contextTurns}
+                  onChange={(e) => {
+                    const v = Math.max(0, Math.min(999, Number(e.target.value) || 0))
+                    handleContextTurnsChange(v)
+                  }}
+                  style={{
+                    width: 64,
+                    padding: '3px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-elevated)',
+                    color: 'var(--text-primary)',
+                    fontSize: 13,
+                    textAlign: 'center',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                />
+              </div>
               <input
                 type="range"
                 min={0}
@@ -544,7 +562,6 @@ export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onI
               />
               <p className="sp-hint">
                 0 = 不截斷（送全部歷史）。設 N 則每次只送最近 N 輪對話給 M。
-                超出範圍的對話靠記憶系統補充。
               </p>
             </div>
 
