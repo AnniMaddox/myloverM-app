@@ -383,6 +383,35 @@ async def init_tables():
             """
         )
 
+        # conversation_vectors — 對話向量化（RAG）
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_vectors (
+                id                    SERIAL PRIMARY KEY,
+                session_id            TEXT NOT NULL,
+                chunk_text            TEXT NOT NULL,
+                embedding             vector(1536),
+                message_ids           INTEGER[] DEFAULT '{}',
+                days_old_at_vectorize REAL,
+                created_at            TIMESTAMPTZ DEFAULT NOW(),
+                vectorized_at         TIMESTAMPTZ DEFAULT NOW()
+            );
+            """
+        )
+        await conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conv_vectors_session
+            ON conversation_vectors (session_id);
+            """
+        )
+        await conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conv_vectors_embedding
+            ON conversation_vectors USING hnsw (embedding vector_cosine_ops)
+            WHERE embedding IS NOT NULL;
+            """
+        )
+
     print("✅ 数据库表结构已就绪")
 
 
@@ -1794,3 +1823,119 @@ async def get_random_memories(
     async with pool.acquire() as conn:
         rows = await conn.fetch(sql, *params)
     return [dict(r) for r in rows]
+
+
+# ============================================================
+# 對話向量化（RAG）
+# ============================================================
+
+async def get_sessions_to_vectorize(days_old: int = 7) -> list[str]:
+    """找出所有訊息都超過 N 天、且尚未向量化的 session_ids"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT DISTINCT c.session_id
+            FROM conversations c
+            WHERE c.role IN ('user', 'assistant')
+              AND c.created_at < NOW() - INTERVAL '{days_old} days'
+              AND c.session_id NOT IN (
+                  SELECT DISTINCT session_id FROM conversation_vectors
+              )
+            """
+        )
+    return [row["session_id"] for row in rows]
+
+
+async def get_messages_for_session_vectorize(session_id: str) -> list[dict]:
+    """取得一個 session 的所有 user/assistant 訊息（按時間排序）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, role, content, created_at
+            FROM conversations
+            WHERE session_id = $1
+              AND role IN ('user', 'assistant')
+            ORDER BY id ASC
+            """,
+            session_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def save_conversation_vector(
+    session_id: str,
+    chunk_text: str,
+    embedding: list[float],
+    message_ids: list[int],
+    days_old: float,
+) -> None:
+    """儲存一段對話的向量"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO conversation_vectors
+                (session_id, chunk_text, embedding, message_ids, days_old_at_vectorize)
+            VALUES ($1, $2, $3::vector, $4, $5)
+            """,
+            session_id,
+            chunk_text,
+            _vector_literal(embedding),
+            message_ids,
+            days_old,
+        )
+
+
+async def search_conversation_vectors(
+    query_embedding: list[float],
+    limit: int = 3,
+) -> list[dict]:
+    """向量相似搜尋，回傳最相關的對話片段"""
+    if not query_embedding or limit <= 0:
+        return []
+    pool = await get_pool()
+    params: list[object] = [_vector_literal(query_embedding), limit]
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT chunk_text, session_id, days_old_at_vectorize,
+                   (embedding <=> $1::vector) AS distance
+            FROM conversation_vectors
+            WHERE embedding IS NOT NULL
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+            """,
+            *params,
+        )
+    return [dict(r) for r in rows]
+
+
+async def count_vectorize_status(days_old: int = 7) -> dict:
+    """回傳向量化進度統計"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        vectorized = await conn.fetchval(
+            "SELECT COUNT(DISTINCT session_id) FROM conversation_vectors"
+        )
+        pending = await conn.fetchval(
+            f"""
+            SELECT COUNT(DISTINCT c.session_id)
+            FROM conversations c
+            WHERE c.role IN ('user', 'assistant')
+              AND c.created_at < NOW() - INTERVAL '{days_old} days'
+              AND c.session_id NOT IN (
+                  SELECT DISTINCT session_id FROM conversation_vectors
+              )
+            """
+        )
+        total_chunks = await conn.fetchval(
+            "SELECT COUNT(*) FROM conversation_vectors"
+        )
+    return {
+        "vectorized_sessions": int(vectorized or 0),
+        "pending_sessions": int(pending or 0),
+        "total_chunks": int(total_chunks or 0),
+        "days_threshold": days_old,
+    }

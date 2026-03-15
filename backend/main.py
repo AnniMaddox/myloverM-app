@@ -87,6 +87,11 @@ from database import (
     update_memory_bank_item,
     update_memory,
     upsert_session_summary,
+    get_sessions_to_vectorize,
+    get_messages_for_session_vectorize,
+    save_conversation_vector,
+    search_conversation_vectors,
+    count_vectorize_status,
 )
 from llm_router import (
     ProviderRoute,
@@ -165,6 +170,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 VECTOR_FALLBACK_ENABLED = os.getenv("VECTOR_FALLBACK_ENABLED", "true").lower() == "true"
+CONV_VECTORIZE_AFTER_DAYS = int(os.getenv("VECTORIZE_AFTER_DAYS", "7"))
+CONV_CHUNK_SIZE = int(os.getenv("VECTORIZE_CHUNK_SIZE", "5"))
+CONV_EMBEDDING_MODEL = os.getenv("CONV_EMBEDDING_MODEL", "text-embedding-3-small")
+MAX_CONV_RAG_INJECT = int(os.getenv("MAX_CONV_RAG_INJECT", "3"))
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 TAVILY_MAX_RESULTS = int(os.getenv("TAVILY_MAX_RESULTS", "5"))
 
@@ -340,12 +349,15 @@ async def lifespan(app: FastAPI):
             await refresh_tag_lexicon()
             count = await get_all_memories_count()
             print(f"✅ 记忆系统已启动，当前记忆数量：{count}")
+            # 啟動時跑一次對話向量化，然後每日排程
+            asyncio.create_task(run_vectorize_job())
+            asyncio.create_task(_daily_vectorize_loop())
         except Exception as e:
             print(f"⚠️  数据库初始化失败: {e}")
             print("⚠️  记忆系统将不可用，但网关仍可正常转发")
     else:
         print("ℹ️  记忆系统已关闭（设置 MEMORY_ENABLED=true 开启）")
-    
+
     yield
     
     if MEMORY_ENABLED:
@@ -559,6 +571,95 @@ async def compute_embedding(text: str) -> list[float]:
     if not isinstance(embedding, list):
         raise ValueError("Embedding API returned empty embedding")
     return [float(v) for v in embedding]
+
+
+async def compute_embedding_conv(text: str) -> list[float]:
+    """用 CONV_EMBEDDING_MODEL（text-embedding-3-small）計算向量，供對話 RAG 用"""
+    api_key = OPENAI_API_KEY or API_KEY
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY 未設定")
+    async with httpx.AsyncClient(timeout=90) as client:
+        response = await client.post(
+            f"{OPENAI_API_BASE}/embeddings",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": CONV_EMBEDDING_MODEL, "input": text[:8000]},
+        )
+    if response.status_code != 200:
+        raise ValueError(f"Embedding API error {response.status_code}: {response.text[:200]}")
+    data = response.json()
+    embedding = data.get("data", [{}])[0].get("embedding")
+    if not isinstance(embedding, list):
+        raise ValueError("Embedding API returned empty result")
+    return [float(v) for v in embedding]
+
+
+def _chunk_messages(messages: list[dict], chunk_size: int) -> list[tuple[list[int], str]]:
+    """把 messages 切成 chunk_size 條一段，回傳 [(message_ids, chunk_text)]"""
+    chunks = []
+    for i in range(0, len(messages), chunk_size):
+        batch = messages[i : i + chunk_size]
+        ids = [int(m["id"]) for m in batch]
+        lines = []
+        for m in batch:
+            label = "Anni" if m["role"] == "user" else "M"
+            content = str(m.get("content", "")).strip()[:500]
+            if content:
+                lines.append(f"[{label}] {content}")
+        text = "\n".join(lines)
+        if text.strip():
+            chunks.append((ids, text))
+    return chunks
+
+
+async def _vectorize_session(session_id: str) -> int:
+    """向量化一個 session，回傳儲存的 chunk 數"""
+    messages = await get_messages_for_session_vectorize(session_id)
+    if not messages:
+        return 0
+    oldest = messages[0].get("created_at")
+    if oldest and hasattr(oldest, "tzinfo"):
+        from datetime import timezone as _tz
+        days_old = (datetime.now(_tz.utc) - oldest).total_seconds() / 86400
+    else:
+        days_old = float(CONV_VECTORIZE_AFTER_DAYS)
+    chunks = _chunk_messages(messages, CONV_CHUNK_SIZE)
+    saved = 0
+    for msg_ids, text in chunks:
+        try:
+            embedding = await compute_embedding_conv(text)
+            await save_conversation_vector(session_id, text, embedding, msg_ids, days_old)
+            saved += 1
+        except Exception as e:
+            print(f"⚠️  向量化 chunk 失敗 (session={session_id[:8]}): {e}")
+    return saved
+
+
+async def run_vectorize_job() -> dict:
+    """跑一次向量化任務，回傳統計"""
+    if not (OPENAI_API_KEY or API_KEY):
+        print("⚠️  向量化跳過：OPENAI_API_KEY 未設定")
+        return {"error": "OPENAI_API_KEY 未設定", "sessions": 0, "chunks": 0}
+    sessions = await get_sessions_to_vectorize(CONV_VECTORIZE_AFTER_DAYS)
+    if not sessions:
+        return {"sessions": 0, "chunks": 0}
+    total_chunks = 0
+    for sid in sessions:
+        n = await _vectorize_session(sid)
+        total_chunks += n
+        if n:
+            print(f"✅ 向量化 {sid[:8]}… → {n} chunks")
+    print(f"🔢 向量化完成：{len(sessions)} sessions, {total_chunks} chunks")
+    return {"sessions": len(sessions), "chunks": total_chunks}
+
+
+async def _daily_vectorize_loop():
+    """每 24 小時跑一次向量化"""
+    while True:
+        await asyncio.sleep(86400)
+        try:
+            await run_vectorize_job()
+        except Exception as e:
+            print(f"⚠️  每日向量化失敗: {e}")
 
 
 async def compute_and_store_embedding(item_id: int, content: str):
@@ -933,6 +1034,25 @@ async def build_system_prompt_with_memories(
         stable_lines = [line for line in stable_lines if line]
         if stable_lines:
             sections.append("【相关稳定记忆】\n" + "\n".join(stable_lines))
+
+        # ── 對話 RAG 注入 ──
+        conv_rag_lines: list[str] = []
+        if user_message and MAX_CONV_RAG_INJECT > 0:
+            try:
+                conv_vec = await compute_embedding_conv(user_message[:500])
+                conv_chunks = await search_conversation_vectors(conv_vec, limit=MAX_CONV_RAG_INJECT)
+                for chunk in conv_chunks:
+                    text = str(chunk.get("chunk_text", "")).strip()
+                    if text:
+                        conv_rag_lines.append(text)
+            except Exception:
+                pass
+        if conv_rag_lines:
+            sections.append(
+                "【相關對話片段】\n"
+                "（以下是你們過去對話中，與現在話題相近的片段。僅供參考，不需要刻意提起。）\n"
+                + "\n---\n".join(conv_rag_lines)
+            )
 
         # ── 自發回憶注入 ──
         spontaneous_lines = []
@@ -3029,6 +3149,35 @@ async def worldbook_active(session_id: str = Query(default="")):
         return JSONResponse({"active": active, "total_enabled": len(entries)})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+# ============================================================
+# 對話向量化 API
+# ============================================================
+
+@app.get("/api/vectorize/status")
+async def vectorize_status_endpoint():
+    try:
+        status = await count_vectorize_status(CONV_VECTORIZE_AFTER_DAYS)
+        return JSONResponse(status)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/vectorize/run")
+async def vectorize_run_endpoint():
+    asyncio.create_task(run_vectorize_job())
+    return JSONResponse({"message": "向量化任務已觸發（背景執行中）"})
+
+
+@app.get("/api/vectorize/settings")
+async def vectorize_settings_endpoint():
+    return JSONResponse({
+        "vectorize_after_days": CONV_VECTORIZE_AFTER_DAYS,
+        "chunk_size": CONV_CHUNK_SIZE,
+        "embedding_model": CONV_EMBEDDING_MODEL,
+        "max_inject": MAX_CONV_RAG_INJECT,
+    })
 
 
 if __name__ == "__main__":
