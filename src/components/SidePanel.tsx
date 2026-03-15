@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { API_BASE_LS_KEY, CONTEXT_TURNS_LS_KEY, TEMPERATURE_LS_KEY, TOP_P_LS_KEY, USER_NAME_LS_KEY, THINKING_BUDGET_LS_KEY, checkHealth, fetchBackendModel, listCheckpoints, saveSnapshot, type CheckpointRecord } from '../api'
+import { API_BASE_LS_KEY, API_SECRET_LS_KEY, CONTEXT_TURNS_LS_KEY, TEMPERATURE_LS_KEY, TOP_P_LS_KEY, USER_NAME_LS_KEY, THINKING_BUDGET_LS_KEY, checkHealth, fetchBackendModel, listCheckpoints, saveSnapshot, type CheckpointRecord } from '../api'
 import { formatRouteLabel, loadModelRouting, MODEL_ROUTING_CHANGE_EVENT } from '../modelRouting'
 import MemoryBankTab from './MemoryBankTab'
 import type { HealthStatus, StoredChat, DisplayMessage } from '../types'
@@ -114,6 +114,9 @@ const TEST_PAGE_URL =
 export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onImportChats }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('system')
   const [apiUrl, setApiUrl]       = useState(loadApiUrl)
+  const [apiSecret, setApiSecret] = useState(() => {
+    try { return localStorage.getItem(API_SECRET_LS_KEY) ?? '' } catch { return '' }
+  })
   const [contextTurns, setContextTurns] = useState(loadContextTurns)
   const [temperature, setTemperature]   = useState(loadTemperature)
   const [topP, setTopP]                 = useState<number | null>(loadTopP)
@@ -497,6 +500,22 @@ export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onI
                 onBlur={(e) => persistNormalizedApiUrl(e.target.value)}
               />
               <p className="sp-hint">填 Railway 根網址，不含 /v1。少貼 https:// 會自動補上。</p>
+            </div>
+
+            {/* 密鑰 */}
+            <div>
+              <label className="sp-label">密鑰</label>
+              <input
+                className="sp-input"
+                type="password"
+                placeholder="Railway 設定的 API_SECRET_KEY"
+                value={apiSecret}
+                onChange={(e) => {
+                  setApiSecret(e.target.value)
+                  try { localStorage.setItem(API_SECRET_LS_KEY, e.target.value) } catch { /* ignore */ }
+                }}
+              />
+              <p className="sp-hint">後端設了 API_SECRET_KEY 才需要填。留空表示不驗證。</p>
             </div>
 
             {/* Model routing */}

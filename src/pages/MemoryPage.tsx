@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // ─── API ─────────────────────────────────────────────────────
-const BACKEND_URL_KEY = 'myloverM-api-url';
+const BACKEND_URL_KEY = 'myloverM-api-base-url';
+const API_SECRET_KEY  = 'myloverM-api-secret';
 const CHAT_STORAGE_KEY = 'myloverM_chats';
 
 function getApiBase(): string {
@@ -10,10 +11,20 @@ function getApiBase(): string {
   } catch { return ''; }
 }
 
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  try {
+    const secret = localStorage.getItem(API_SECRET_KEY)?.trim();
+    if (secret) headers['Authorization'] = `Bearer ${secret}`;
+  } catch { /* ignore */ }
+  return headers;
+}
+
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const base = getApiBase();
   if (!base) throw new Error('NO_URL');
-  return fetch(`${base}${path}`, init);
+  const mergedHeaders = authHeaders(init?.headers as Record<string, string> | undefined);
+  return fetch(`${base}${path}`, { ...init, headers: mergedHeaders });
 }
 
 // ─── Types ───────────────────────────────────────────────────

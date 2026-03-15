@@ -21,14 +21,24 @@ const POSITION_LABELS: Record<number, string> = {
 };
 
 function getApiBase(): string {
-  const url = localStorage.getItem('myloverM-api-url') || '';
+  const url = localStorage.getItem('myloverM-api-base-url') || '';
   return url.replace(/\/+$/, '');
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  try {
+    const secret = localStorage.getItem('myloverM-api-secret')?.trim();
+    if (secret) headers['Authorization'] = `Bearer ${secret}`;
+  } catch { /* ignore */ }
+  return headers;
 }
 
 async function apiFetch(path: string, opts?: RequestInit) {
   const base = getApiBase();
   if (!base) throw new Error('請先在設定中填入後端 URL');
-  const res = await fetch(base + path, opts);
+  const mergedHeaders = authHeaders(opts?.headers as Record<string, string> | undefined);
+  const res = await fetch(base + path, { ...opts, headers: mergedHeaders });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -49,7 +59,7 @@ const EMPTY_ENTRY: Omit<PersonaEntry, 'id' | 'created_at' | 'updated_at'> = {
   priority: 50,
 };
 
-const BACKEND_URL_KEY = 'myloverM-api-url';
+const BACKEND_URL_KEY = 'myloverM-api-base-url';
 
 export default function WorldbookPage({ onBack }: WorldbookPageProps) {
   const [entries, setEntries] = useState<PersonaEntry[]>([]);

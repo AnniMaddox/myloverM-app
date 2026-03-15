@@ -16,8 +16,9 @@ import type {
   StreamEvent,
 } from './types'
 
-export const API_BASE_LS_KEY    = 'myloverM-api-base-url'
-export const MODEL_LS_KEY       = 'myloverM-model'
+export const API_BASE_LS_KEY      = 'myloverM-api-base-url'
+export const API_SECRET_LS_KEY    = 'myloverM-api-secret'
+export const MODEL_LS_KEY         = 'myloverM-model'
 export const CONTEXT_TURNS_LS_KEY = 'myloverM-context-turns'
 export const TEMPERATURE_LS_KEY   = 'myloverM-temperature'
 export const TOP_P_LS_KEY         = 'myloverM-top-p'
@@ -42,6 +43,15 @@ function apiUrl(path: string): string {
   return base ? `${base}${path}` : path
 }
 
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra }
+  try {
+    const secret = localStorage.getItem(API_SECRET_LS_KEY)?.trim()
+    if (secret) headers['Authorization'] = `Bearer ${secret}`
+  } catch { /* ignore */ }
+  return headers
+}
+
 // ────────────────────────────────────────────────────────────
 // Health check
 // ────────────────────────────────────────────────────────────
@@ -54,20 +64,20 @@ export async function checkHealth(): Promise<HealthStatus> {
 
 // 取得後端設定的 model 名稱
 export async function fetchBackendModel(): Promise<string> {
-  const res = await fetch(apiUrl('/v1/models'))
+  const res = await fetch(apiUrl('/v1/models'), { headers: authHeaders() })
   if (!res.ok) return ''
   const data = await res.json() as { data?: Array<{ id?: string }> }
   return data?.data?.[0]?.id ?? ''
 }
 
 export async function fetchModelRoutingMeta(): Promise<ModelRoutingMeta> {
-  const res = await fetch(apiUrl('/api/model-routing/meta'))
+  const res = await fetch(apiUrl('/api/model-routing/meta'), { headers: authHeaders() })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json() as Promise<ModelRoutingMeta>
 }
 
 export async function fetchProviderModels(provider: ModelProvider): Promise<ProviderModel[]> {
-  const res = await fetch(apiUrl(`/api/model-routing/models?provider=${encodeURIComponent(provider)}`))
+  const res = await fetch(apiUrl(`/api/model-routing/models?provider=${encodeURIComponent(provider)}`), { headers: authHeaders() })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
@@ -126,7 +136,7 @@ export async function* streamChat(input: {
   try {
     res = await fetch(apiUrl('/v1/chat/completions'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
     })
   } catch {
@@ -229,7 +239,7 @@ export async function* streamChat(input: {
 export async function createCheckpoint(sessionId: string, modelRouting?: ModelRoutingConfig): Promise<CheckpointResult> {
   const res = await fetch(apiUrl('/api/checkpoint/create'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       session_id: sessionId,
       ...(modelRouting && Object.keys(modelRouting).length > 0 ? { model_routing: modelRouting } : {}),
@@ -260,14 +270,14 @@ export interface CheckpointRecord {
 }
 
 export async function listCheckpoints(sessionId: string): Promise<CheckpointRecord[]> {
-  const res = await fetch(apiUrl(`/api/checkpoints?session_id=${encodeURIComponent(sessionId)}`))
+  const res = await fetch(apiUrl(`/api/checkpoints?session_id=${encodeURIComponent(sessionId)}`), { headers: authHeaders() })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json() as { checkpoints: CheckpointRecord[] }
   return data.checkpoints ?? []
 }
 
 export async function listSnapshots(): Promise<CheckpointRecord[]> {
-  const res = await fetch(apiUrl('/api/snapshots'))
+  const res = await fetch(apiUrl('/api/snapshots'), { headers: authHeaders() })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json() as { snapshots: CheckpointRecord[] }
   return data.snapshots ?? []
@@ -276,7 +286,7 @@ export async function listSnapshots(): Promise<CheckpointRecord[]> {
 export async function saveSnapshot(checkpointId: number, cardTitle?: string): Promise<void> {
   const res = await fetch(apiUrl(`/api/snapshots/${checkpointId}/save`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ card_title: cardTitle ?? null }),
   })
   if (!res.ok) {
@@ -288,7 +298,7 @@ export async function saveSnapshot(checkpointId: number, cardTitle?: string): Pr
 export async function updateSnapshot(checkpointId: number, cardTitle: string): Promise<void> {
   const res = await fetch(apiUrl(`/api/snapshots/${checkpointId}`), {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ card_title: cardTitle }),
   })
   if (!res.ok) {
@@ -298,7 +308,7 @@ export async function updateSnapshot(checkpointId: number, cardTitle: string): P
 }
 
 export async function deleteSnapshot(checkpointId: number): Promise<void> {
-  const res = await fetch(apiUrl(`/api/snapshots/${checkpointId}`), { method: 'DELETE' })
+  const res = await fetch(apiUrl(`/api/snapshots/${checkpointId}`), { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) {
     const data = await res.json() as { error?: string }
     throw new Error(data?.error ?? `HTTP ${res.status}`)
@@ -317,7 +327,7 @@ export async function listMemoryBank(params?: {
   if (params?.category) query.set('category', params.category)
   if (params?.always_load !== undefined) query.set('always_load', String(params.always_load))
   const suffix = query.toString() ? `?${query.toString()}` : ''
-  const res = await fetch(apiUrl(`/api/memory-bank${suffix}`))
+  const res = await fetch(apiUrl(`/api/memory-bank${suffix}`), { headers: authHeaders() })
   if (!res.ok) {
     const data = await res.json() as { error?: string }
     throw new Error(data?.error ?? `HTTP ${res.status}`)
@@ -328,7 +338,7 @@ export async function listMemoryBank(params?: {
 export async function createMemoryBankItem(item: MemoryBankUpsertInput): Promise<MemoryBankItem> {
   const res = await fetch(apiUrl('/api/memory-bank'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(item),
   })
   if (!res.ok) {
@@ -344,7 +354,7 @@ export async function updateMemoryBankItem(
 ): Promise<MemoryBankItem> {
   const res = await fetch(apiUrl(`/api/memory-bank/${id}`), {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(fields),
   })
   if (!res.ok) {
@@ -355,7 +365,7 @@ export async function updateMemoryBankItem(
 }
 
 export async function deleteMemoryBankItem(id: number): Promise<void> {
-  const res = await fetch(apiUrl(`/api/memory-bank/${id}`), { method: 'DELETE' })
+  const res = await fetch(apiUrl(`/api/memory-bank/${id}`), { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) {
     const data = await res.json() as { error?: string }
     throw new Error(data?.error ?? `HTTP ${res.status}`)
@@ -365,7 +375,7 @@ export async function deleteMemoryBankItem(id: number): Promise<void> {
 export async function importMemoryBank(items: MemoryBankUpsertInput[]): Promise<{ imported: number }> {
   const res = await fetch(apiUrl('/api/memory-bank/import'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(items),
   })
   if (!res.ok) {
@@ -376,7 +386,7 @@ export async function importMemoryBank(items: MemoryBankUpsertInput[]): Promise<
 }
 
 export async function exportMemoryBank(): Promise<MemoryBankItem[]> {
-  const res = await fetch(apiUrl('/api/memory-bank/export'))
+  const res = await fetch(apiUrl('/api/memory-bank/export'), { headers: authHeaders() })
   if (!res.ok) {
     const data = await res.json() as { error?: string }
     throw new Error(data?.error ?? `HTTP ${res.status}`)
@@ -385,7 +395,7 @@ export async function exportMemoryBank(): Promise<MemoryBankItem[]> {
 }
 
 export async function reembedAllMemoryBank(): Promise<{ updated: number }> {
-  const res = await fetch(apiUrl('/api/memory-bank/reembed-all'), { method: 'POST' })
+  const res = await fetch(apiUrl('/api/memory-bank/reembed-all'), { method: 'POST', headers: authHeaders() })
   if (!res.ok) {
     const data = await res.json() as { error?: string }
     throw new Error(data?.error ?? `HTTP ${res.status}`)

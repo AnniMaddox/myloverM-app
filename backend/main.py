@@ -365,6 +365,17 @@ app.add_middleware(
         allow_headers=["*"],
 )
 
+_API_SECRET = os.getenv("API_SECRET_KEY", "").strip()
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # GET / 健康檢查不驗證
+    if _API_SECRET and not (request.method == "GET" and request.url.path == "/"):
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer ") or auth[7:].strip() != _API_SECRET:
+            return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    return await call_next(request)
+
 
 # ============================================================
 # 记忆注入
