@@ -578,6 +578,10 @@ function BackupTab() {
   const memFileRef = useRef<HTMLInputElement>(null);
   const chatFileRef = useRef<HTMLInputElement>(null);
   const logFileRef = useRef<HTMLInputElement>(null);
+  const wbFileRef = useRef<HTMLInputElement>(null);
+  const mbFileRef = useRef<HTMLInputElement>(null);
+  const [wbMsg, setWbMsg] = useState('');
+  const [mbMsg, setMbMsg] = useState('');
 
   async function handleFullBackup() {
     setFullBusy(true);
@@ -684,6 +688,44 @@ function BackupTab() {
     finally { if (logFileRef.current) logFileRef.current.value = ''; }
   }
 
+  async function importWorldbookJson(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as unknown[];
+      if (!Array.isArray(data)) { setWbMsg('JSON 格式錯誤，請確認是陣列格式'); return; }
+      const res = await apiFetch('/api/worldbook/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json() as { imported?: number; skipped?: number; error?: string };
+      if (result.error) { setWbMsg(`錯誤：${result.error}`); return; }
+      setWbMsg(`匯入完成！新增 ${result.imported} 條，略過 ${result.skipped} 條`);
+    } catch (e) { setWbMsg(e instanceof Error ? e.message : '匯入失敗'); }
+    finally { if (wbFileRef.current) wbFileRef.current.value = ''; }
+  }
+
+  async function importMemoryBankJson(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as unknown[];
+      if (!Array.isArray(data)) { setMbMsg('JSON 格式錯誤，請確認是陣列格式'); return; }
+      const res = await apiFetch('/api/memory-bank/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json() as { imported?: number; skipped?: number; error?: string };
+      if (result.error) { setMbMsg(`錯誤：${result.error}`); return; }
+      setMbMsg(`匯入完成！新增 ${result.imported} 條`);
+    } catch (e) { setMbMsg(e instanceof Error ? e.message : '匯入失敗'); }
+    finally { if (mbFileRef.current) mbFileRef.current.value = ''; }
+  }
+
   function exportChats() {
     try {
       const raw = localStorage.getItem(CHAT_STORAGE_KEY);
@@ -761,6 +803,26 @@ function BackupTab() {
         </div>
         <input ref={logFileRef} type="file" accept=".txt" style={{ display: 'none' }} onChange={importChatLog} />
         {logMsg && <div className="mem-msg">{logMsg}</div>}
+      </div>
+
+      <div className="mem-backup-block">
+        <h3 className="mem-backup-title">🌍 世界書匯入</h3>
+        <p className="mem-hint">匯入 JSON 陣列格式的世界書條目（含 title / content / keywords / always_on / enabled / priority）。</p>
+        <div className="mem-backup-btns">
+          <button className="mem-btn" onClick={() => wbFileRef.current?.click()}>⬆ 選擇 JSON 檔案</button>
+        </div>
+        <input ref={wbFileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importWorldbookJson} />
+        {wbMsg && <div className="mem-msg">{wbMsg}</div>}
+      </div>
+
+      <div className="mem-backup-block">
+        <h3 className="mem-backup-title">🏦 記憶銀行匯入</h3>
+        <p className="mem-hint">匯入 JSON 陣列格式的記憶銀行條目（含 title / content / category / tags / always_load / sort_order）。</p>
+        <div className="mem-backup-btns">
+          <button className="mem-btn" onClick={() => mbFileRef.current?.click()}>⬆ 選擇 JSON 檔案</button>
+        </div>
+        <input ref={mbFileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={importMemoryBankJson} />
+        {mbMsg && <div className="mem-msg">{mbMsg}</div>}
       </div>
     </div>
   );

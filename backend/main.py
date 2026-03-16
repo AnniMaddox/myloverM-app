@@ -3415,6 +3415,40 @@ async def worldbook_reorder(request: Request):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+@app.post("/api/worldbook/import")
+async def worldbook_import(request: Request):
+    """批次匯入世界書條目（接受 JSON 陣列）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+    if not isinstance(body, list):
+        return JSONResponse({"error": "請傳入 JSON 陣列"}, status_code=400)
+    imported = skipped = 0
+    for item in body:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title", "") or "").strip()
+        content = str(item.get("content", "") or "").strip()
+        if not title or not content:
+            skipped += 1
+            continue
+        try:
+            await create_persona_entry(
+                title=title,
+                content=content,
+                keywords=str(item.get("keywords", "") or ""),
+                position=int(item.get("position", 1)),
+                always_on=bool(item.get("always_on", False)),
+                enabled=bool(item.get("enabled", True)),
+                priority=int(item.get("priority", 50)),
+            )
+            imported += 1
+        except Exception:
+            skipped += 1
+    return JSONResponse({"imported": imported, "skipped": skipped})
+
+
 @app.get("/api/worldbook/active")
 async def worldbook_active(session_id: str = Query(default="")):
     """Debug endpoint: 顯示當前會話中哪些世界書條目會被注入。"""
