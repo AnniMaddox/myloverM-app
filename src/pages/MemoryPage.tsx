@@ -569,12 +569,55 @@ function parseChatTxt(text: string): { role: 'user' | 'assistant'; content: stri
 // Tab 4 — 備份
 // ═══════════════════════════════════════════════════════════
 function BackupTab() {
+  const [fullMsg, setFullMsg] = useState('');
+  const [fullBusy, setFullBusy] = useState(false);
   const [memMsg, setMemMsg] = useState('');
   const [chatMsg, setChatMsg] = useState('');
   const [logMsg, setLogMsg] = useState('');
+  const fullRestoreRef = useRef<HTMLInputElement>(null);
   const memFileRef = useRef<HTMLInputElement>(null);
   const chatFileRef = useRef<HTMLInputElement>(null);
   const logFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleFullBackup() {
+    setFullBusy(true);
+    setFullMsg('');
+    try {
+      const res = await apiFetch('/api/backup/full');
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? `HTTP ${res.status}`); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click(); URL.revokeObjectURL(url);
+      setFullMsg('完整備份已下載！');
+    } catch (e) { setFullMsg(e instanceof Error ? e.message : '備份失敗'); }
+    finally { setFullBusy(false); }
+  }
+
+  async function handleFullRestore(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (fullRestoreRef.current) fullRestoreRef.current.value = '';
+    setFullBusy(true);
+    setFullMsg('');
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await apiFetch('/api/restore/full', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(json),
+      });
+      const result = await res.json() as { memories?: { imported: number; skipped: number }; loops?: { imported: number; skipped: number }; snapshots?: { imported: number; skipped: number }; error?: string };
+      if (result.error) { setFullMsg(`錯誤：${result.error}`); return; }
+      const m = result.memories ?? { imported: 0, skipped: 0 };
+      const l = result.loops ?? { imported: 0, skipped: 0 };
+      const s = result.snapshots ?? { imported: 0, skipped: 0 };
+      setFullMsg(`還原完成！記憶 +${m.imported}（略過 ${m.skipped}），Loops +${l.imported}（略過 ${l.skipped}），Snapshot +${s.imported}（略過 ${s.skipped}）`);
+    } catch (e) { setFullMsg(e instanceof Error ? `還原失敗：${e.message}` : '還原失敗'); }
+    finally { setFullBusy(false); }
+  }
 
   async function exportMemories() {
     try {
@@ -673,6 +716,21 @@ function BackupTab() {
 
   return (
     <div className="mem-section">
+      <div className="mem-backup-block">
+        <h3 className="mem-backup-title">🗄 資料庫完整備份</h3>
+        <p className="mem-hint">包含記憶、Loops、Snapshot。降版本前先備份，換機後用匯入還原。</p>
+        <div className="mem-backup-btns">
+          <button className="mem-btn mem-btn--dl" onClick={handleFullBackup} disabled={fullBusy}>
+            {fullBusy ? '處理中…' : '⬇ 下載備份'}
+          </button>
+          <button className="mem-btn" onClick={() => fullRestoreRef.current?.click()} disabled={fullBusy}>
+            {fullBusy ? '處理中…' : '⬆ 匯入備份'}
+          </button>
+        </div>
+        <input ref={fullRestoreRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleFullRestore} />
+        {fullMsg && <div className="mem-msg">{fullMsg}</div>}
+      </div>
+
       <div className="mem-backup-block">
         <h3 className="mem-backup-title">🧠 記憶備份</h3>
         <p className="mem-hint">記憶存在後端資料庫（Railway），備份可防止服務遷移時資料遺失。</p>

@@ -3307,7 +3307,24 @@ async def delete_snapshot_endpoint(checkpoint_id: int):
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-# ============================================================
+@app.delete("/api/checkpoints/{checkpoint_id}")
+async def delete_checkpoint_endpoint(checkpoint_id: int):
+    """永久刪除一筆 checkpoint（壓縮摘要）。"""
+    if not MEMORY_ENABLED:
+        return JSONResponse({"error": "記憶系統未啟用"}, status_code=400)
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "DELETE FROM conversation_checkpoints WHERE id = $1 RETURNING id",
+                checkpoint_id,
+            )
+        if not row:
+            return JSONResponse({"error": "找不到該 checkpoint"}, status_code=404)
+        return JSONResponse({"status": "ok", "id": checkpoint_id})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
 
 # ============================================================
 # 世界書 API
