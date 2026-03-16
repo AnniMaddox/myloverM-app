@@ -159,7 +159,7 @@ export default function ChatPage({ onBack }: ChatPageProps) {
 const CHAT_PAGE_STYLES = `
 .app-shell {
   display: flex;
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
   background: var(--bg-base);
 }
