@@ -3330,11 +3330,18 @@ async def delete_checkpoint_endpoint(checkpoint_id: int):
 # 世界書 API
 # ============================================================
 
+def _wb_entry(e) -> dict:
+    d = dict(e) if not isinstance(e, dict) else dict(e)
+    for k in ('created_at', 'updated_at'):
+        if k in d and hasattr(d[k], 'isoformat'):
+            d[k] = d[k].isoformat()
+    return d
+
 @app.get("/api/worldbook")
 async def worldbook_list():
     try:
         entries = await get_all_persona_entries()
-        return JSONResponse({"entries": [dict(e) for e in entries]})
+        return JSONResponse({"entries": [_wb_entry(e) for e in entries]})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3355,7 +3362,7 @@ async def worldbook_create(request: Request):
             enabled=bool(body.get("enabled", True)),
             priority=int(body.get("priority", 50)),
         )
-        return JSONResponse({"entry": dict(entry)})
+        return JSONResponse({"entry": _wb_entry(entry)})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3372,7 +3379,7 @@ async def worldbook_update(entry_id: int, request: Request):
         entry = await update_persona_entry(entry_id, **updates)
         if entry is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse({"entry": dict(entry)})
+        return JSONResponse({"entry": _wb_entry(entry)})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3394,7 +3401,7 @@ async def worldbook_toggle(entry_id: int):
         entry = await toggle_persona_entry(entry_id)
         if entry is None:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return JSONResponse({"entry": dict(entry)})
+        return JSONResponse({"entry": _wb_entry(entry)})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
