@@ -949,8 +949,9 @@ function GuideTab() {
       <p>進入 <strong>聊天</strong>，點右上角 <strong>⋯</strong>，切到 <strong>System</strong> 分頁。</p>
       <ol>
         <li>在「後端 URL」貼上你的 Railway 服務網址（格式：<code>https://xxxx.up.railway.app</code>）</li>
+        <li>在「密鑰」填入 Railway 環境變數 <code>API_SECRET_KEY</code> 的值（防止外人呼叫你的後端）</li>
         <li>點「測試連線」，顯示 ✓ 連線正常就成功了</li>
-        <li>Model 欄位留空 → 自動用 Railway 環境變數設定的模型</li>
+        <li>Model 欄位留空 → 自動用 Railway 環境變數設定的模型；或點右上角 <strong>⚙ 模型切換</strong> 手動指定</li>
       </ol>
 
       <h2>🧠 記憶三層系統</h2>
@@ -987,6 +988,32 @@ function GuideTab() {
         <li>事情完成後在「Loops」tab 標記「已解決」</li>
       </ul>
 
+      <h2>📸 快照（Snapshot）</h2>
+      <p>壓縮對話後，可以把那份摘要存成快照，跨 session 召回。</p>
+      <ul>
+        <li>聊天 header 的壓縮按鈕 → 產生摘要 → 側欄 Checkpoint tab 可存成快照</li>
+        <li>在「快照」tab 管理：勾選召回模式（持久 / 一次性）→ 下次對話 M 會讀到那份內容</li>
+        <li>適合用來讓 M 記住特別重要的一段對話，或某個時期的狀態</li>
+      </ul>
+
+      <h2>🔗 模型切換（Model Routing）</h2>
+      <p>聊天頁右上角 <strong>⚙</strong> 可以分任務指定模型：</p>
+      <ul>
+        <li><strong>聊天</strong>：主回覆走這條（建議 Claude Sonnet / GPT-4o）</li>
+        <li><strong>摘要 / 壓縮</strong>：checkpoint 壓縮和 session 摘要（便宜模型也夠用）</li>
+        <li><strong>提取</strong>：記憶提取、open loop 分析</li>
+        <li><strong>Embedding（對話向量化）</strong>：只支援 OpenAI embedding 系列，例如 <code>text-embedding-3-small</code></li>
+      </ul>
+      <p>設定存在本機，模型 key 還是放在 Railway，不會外洩。</p>
+
+      <h2>🗂 對話向量化（長期 RAG）</h2>
+      <p>超過一定天數的舊對話會自動切成小段、計算 embedding，存進資料庫。</p>
+      <ul>
+        <li>每次聊天時，M 會自動搜尋語意相似的舊對話片段，注入到背景記憶裡</li>
+        <li>不用手動操作，後端每 24 小時自動跑一次</li>
+        <li>向量化的天數門檻、段落大小等，在 Railway 環境變數裡調整（<code>VECTORIZE_AFTER_DAYS</code> 等）</li>
+      </ul>
+
       <h2>💾 備份建議</h2>
       <ul>
         <li><strong>記憶</strong>：Railway 免費方案每月有睡眠限制，遷移前記得備份</li>
@@ -997,10 +1024,12 @@ function GuideTab() {
       <div className="mem-faq">
         <div className="mem-faq-q">Q：M 不記得我說的事情了？</div>
         <div className="mem-faq-a">確認後端 URL 有設定且連線正常。記憶提取在每段 session 結束時觸發，session 沒結束不會提取新記憶。</div>
+        <div className="mem-faq-q">Q：測試連線一直失敗？</div>
+        <div className="mem-faq-a">先確認後端 URL 格式正確（結尾不要有斜線）。如果設了 API_SECRET_KEY，記得在「密鑰」欄填好，否則連線會被擋。</div>
         <div className="mem-faq-q">Q：Railway 服務掛了怎麼辦？</div>
         <div className="mem-faq-a">先到 Railway 控制台確認服務狀態。免費方案有月流量限制，用完會睡眠。</div>
         <div className="mem-faq-q">Q：換手機怎麼辦？</div>
-        <div className="mem-faq-a">1. 在「備份」tab 下載對話 JSON，存到 iCloud/Google Drive。2. 新手機設定好後端 URL。3. 匯入對話 JSON。記憶在後端，不用另外遷移。</div>
+        <div className="mem-faq-a">1. 在「備份」tab 下載對話 JSON，存到 iCloud/Google Drive。2. 新手機設定好後端 URL 和密鑰。3. 匯入對話 JSON。記憶在後端，不用另外遷移。</div>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import type { ModelProvider, ModelRouteChoice, ModelRoutingConfig, ModelRouteTas
 export const MODEL_ROUTING_LS_KEY = 'myloverM-model-routing-v1'
 export const MODEL_ROUTING_CHANGE_EVENT = 'myloverM-model-routing-change'
 
-const TASKS: ModelRouteTask[] = ['chat', 'summary', 'extraction']
+const TASKS: ModelRouteTask[] = ['chat', 'summary', 'extraction', 'conv_embedding']
 
 function normalizeProvider(value: unknown): ModelProvider | null {
   if (value === 'openai' || value === 'anthropic' || value === 'gemini') return value

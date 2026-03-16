@@ -394,6 +394,22 @@ export async function exportMemoryBank(): Promise<MemoryBankItem[]> {
   return res.json() as Promise<MemoryBankItem[]>
 }
 
+// ────────────────────────────────────────────────────────────
+// Vectorize settings
+// ────────────────────────────────────────────────────────────
+
+export async function saveVectorizeSettings(embeddingModel: string): Promise<void> {
+  const res = await fetch(apiUrl('/api/vectorize/settings'), {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ embedding_model: embeddingModel }),
+  })
+  if (!res.ok) {
+    const data = await res.json() as { error?: string }
+    throw new Error(data?.error ?? `HTTP ${res.status}`)
+  }
+}
+
 export async function reembedAllMemoryBank(): Promise<{ updated: number }> {
   const res = await fetch(apiUrl('/api/memory-bank/reembed-all'), { method: 'POST', headers: authHeaders() })
   if (!res.ok) {

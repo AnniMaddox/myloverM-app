@@ -171,8 +171,10 @@ OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstr
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 VECTOR_FALLBACK_ENABLED = os.getenv("VECTOR_FALLBACK_ENABLED", "true").lower() == "true"
 CONV_VECTORIZE_AFTER_DAYS = int(os.getenv("VECTORIZE_AFTER_DAYS", "7"))
-CONV_CHUNK_SIZE = int(os.getenv("VECTORIZE_CHUNK_SIZE", "5"))
-CONV_EMBEDDING_MODEL = os.getenv("CONV_EMBEDDING_MODEL", "text-embedding-3-small")
+CONV_CHUNK_SIZE = int(os.getenv("VECTORIZE_CHUNK_SIZE", "8"))
+CONV_CHUNK_OVERLAP = int(os.getenv("VECTORIZE_CHUNK_OVERLAP", "3"))
+_CONV_EMBEDDING_MODEL_ENV = os.getenv("CONV_EMBEDDING_MODEL", "text-embedding-3-small")
+_vectorize_settings: dict = {"embedding_model": _CONV_EMBEDDING_MODEL_ENV}
 MAX_CONV_RAG_INJECT = int(os.getenv("MAX_CONV_RAG_INJECT", "3"))
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 TAVILY_MAX_RESULTS = int(os.getenv("TAVILY_MAX_RESULTS", "5"))
@@ -582,7 +584,7 @@ async def compute_embedding_conv(text: str) -> list[float]:
         response = await client.post(
             f"{OPENAI_API_BASE}/embeddings",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": CONV_EMBEDDING_MODEL, "input": text[:8000]},
+            json={"model": _vectorize_settings["embedding_model"], "input": text[:8000]},
         )
     if response.status_code != 200:
         raise ValueError(f"Embedding API error {response.status_code}: {response.text[:200]}")
@@ -593,12 +595,23 @@ async def compute_embedding_conv(text: str) -> list[float]:
     return [float(v) for v in embedding]
 
 
-def _chunk_messages(messages: list[dict], chunk_size: int) -> list[tuple[list[int], str]]:
-    """把 messages 切成 chunk_size 條一段，回傳 [(message_ids, chunk_text)]"""
+def _chunk_messages(
+    messages: list[dict],
+    chunk_size: int,
+    overlap: int = 0,
+) -> list[tuple[list[int], str]]:
+    """滑動窗口切 chunk，相鄰 chunk 共用 overlap 條，回傳 [(message_ids, chunk_text)]"""
+    if not messages:
+        return []
+    step = max(1, chunk_size - overlap)
     chunks = []
-    for i in range(0, len(messages), chunk_size):
+    seen: set[tuple[int, ...]] = set()
+    for i in range(0, len(messages), step):
         batch = messages[i : i + chunk_size]
-        ids = [int(m["id"]) for m in batch]
+        ids = tuple(int(m["id"]) for m in batch)
+        if ids in seen:
+            continue
+        seen.add(ids)
         lines = []
         for m in batch:
             label = "Anni" if m["role"] == "user" else "M"
@@ -607,7 +620,7 @@ def _chunk_messages(messages: list[dict], chunk_size: int) -> list[tuple[list[in
                 lines.append(f"[{label}] {content}")
         text = "\n".join(lines)
         if text.strip():
-            chunks.append((ids, text))
+            chunks.append((list(ids), text))
     return chunks
 
 
@@ -622,7 +635,7 @@ async def _vectorize_session(session_id: str) -> int:
         days_old = (datetime.now(_tz.utc) - oldest).total_seconds() / 86400
     else:
         days_old = float(CONV_VECTORIZE_AFTER_DAYS)
-    chunks = _chunk_messages(messages, CONV_CHUNK_SIZE)
+    chunks = _chunk_messages(messages, CONV_CHUNK_SIZE, overlap=CONV_CHUNK_OVERLAP)
     saved = 0
     for msg_ids, text in chunks:
         try:
@@ -3171,13 +3184,24 @@ async def vectorize_run_endpoint():
 
 
 @app.get("/api/vectorize/settings")
-async def vectorize_settings_endpoint():
+async def vectorize_settings_get():
     return JSONResponse({
         "vectorize_after_days": CONV_VECTORIZE_AFTER_DAYS,
         "chunk_size": CONV_CHUNK_SIZE,
-        "embedding_model": CONV_EMBEDDING_MODEL,
+        "chunk_overlap": CONV_CHUNK_OVERLAP,
+        "embedding_model": _vectorize_settings["embedding_model"],
         "max_inject": MAX_CONV_RAG_INJECT,
     })
+
+
+@app.post("/api/vectorize/settings")
+async def vectorize_settings_post(request: Request):
+    body = await request.json()
+    model = str(body.get("embedding_model", "")).strip()
+    if not model:
+        return JSONResponse({"error": "embedding_model 不能為空"}, status_code=400)
+    _vectorize_settings["embedding_model"] = model
+    return JSONResponse({"ok": True, "embedding_model": model})
 
 
 if __name__ == "__main__":

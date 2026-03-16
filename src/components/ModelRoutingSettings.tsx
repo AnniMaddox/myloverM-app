@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchModelRoutingMeta, fetchProviderModels, getConfiguredApiBaseUrl } from '../api'
+import { fetchModelRoutingMeta, fetchProviderModels, getConfiguredApiBaseUrl, saveVectorizeSettings } from '../api'
 import {
   clearModelRouting,
   formatRouteLabel,
@@ -26,6 +26,7 @@ const TASKS: Array<{ id: ModelRouteTask; label: string; description: string }> =
   { id: 'chat', label: '聊天', description: '主聊天回覆走這條。' },
   { id: 'summary', label: '摘要 / 壓縮', description: 'session summary 跟 checkpoint 都共用這條。' },
   { id: 'extraction', label: '提取', description: '記憶提取、open loop 提取走這條。' },
+  { id: 'conv_embedding', label: 'Embedding（對話向量化）', description: '舊對話向量化用的 embedding 模型。只有 OpenAI embedding 系列有效（text-embedding-3-small 等）。' },
 ]
 
 const UPCOMING_TASK = {
@@ -128,6 +129,11 @@ export default function ModelRoutingSettings({ open, onClose }: Props) {
       saveModelRouting(next)
     } else {
       clearModelRouting()
+    }
+    // 若有設 conv_embedding，同步推到後端
+    const embChoice = next.conv_embedding
+    if (embChoice?.model) {
+      void saveVectorizeSettings(embChoice.model).catch(() => {/* 靜默失敗 */})
     }
   }
 

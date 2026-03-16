@@ -73,7 +73,7 @@ export interface HealthStatus {
 }
 
 export type ModelProvider = 'openai' | 'anthropic' | 'gemini'
-export type ModelRouteTask = 'chat' | 'summary' | 'extraction'
+export type ModelRouteTask = 'chat' | 'summary' | 'extraction' | 'conv_embedding'
 
 export interface ModelRouteChoice {
   provider: ModelProvider
@@ -84,6 +84,7 @@ export interface ModelRoutingConfig {
   chat?: ModelRouteChoice
   summary?: ModelRouteChoice
   extraction?: ModelRouteChoice
+  conv_embedding?: ModelRouteChoice
 }
 
 export interface ProviderStatus {
