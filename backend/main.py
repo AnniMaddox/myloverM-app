@@ -2740,6 +2740,155 @@ async def import_chatlog(request: Request):
 
 
 # ============================================================
+# 完整備份 / 還原
+# ============================================================
+
+@app.get("/api/backup/full")
+async def backup_full():
+    """完整資料庫備份：記憶、Loops、Snapshot、世界書全部打包。"""
+    if not MEMORY_ENABLED:
+        return JSONResponse({"error": "記憶系統未啟用"}, status_code=400)
+    try:
+        def clean_list(rows):
+            result = []
+            for row in rows:
+                d = dict(row) if not isinstance(row, dict) else row
+                cleaned = {}
+                for k, v in d.items():
+                    if k == "has_embedding":
+                        continue
+                    cleaned[k] = v.isoformat() if hasattr(v, "isoformat") else v
+                result.append(cleaned)
+            return result
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            memories_rows    = await conn.fetch("SELECT * FROM memories ORDER BY created_at")
+            loops_rows       = await conn.fetch("SELECT * FROM open_loops ORDER BY created_at")
+            checkpoints_rows = await conn.fetch("SELECT * FROM conversation_checkpoints ORDER BY created_at")
+            mem_bank_rows    = await conn.fetch("SELECT * FROM memory_bank ORDER BY sort_order, created_at")
+            personas_rows    = await conn.fetch("SELECT * FROM persona_entries ORDER BY sort_order, id")
+
+        payload = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "version": 1,
+            "memories":    clean_list(memories_rows),
+            "open_loops":  clean_list(loops_rows),
+            "checkpoints": clean_list(checkpoints_rows),
+            "memory_bank": clean_list(mem_bank_rows),
+            "personas":    clean_list(personas_rows),
+        }
+        filename = f"backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        return JSONResponse(
+            content=payload,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/restore/full")
+async def restore_full(request: Request):
+    """完整資料庫還原：記憶、Loops、Snapshot 全部匯入。"""
+    if not MEMORY_ENABLED:
+        return JSONResponse({"error": "記憶系統未啟用"}, status_code=400)
+    try:
+        data = await request.json()
+        memories_in    = data.get("memories", [])
+        loops_in       = data.get("open_loops", [])
+        checkpoints_in = data.get("checkpoints", [])
+
+        # ── 1. 記憶 ──────────────────────────────────────────────
+        mem_imported = mem_skipped = 0
+        for m in memories_in:
+            content = (m.get("content") or "").strip()
+            if not content:
+                continue
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                exists = await conn.fetchval(
+                    "SELECT COUNT(*) FROM memories WHERE content = $1", content
+                )
+            if exists:
+                mem_skipped += 1
+                continue
+            await save_memory(
+                content=content,
+                importance=m.get("importance", 5),
+                source_session=m.get("source_session", "restore"),
+                tier=m.get("tier", MEMORY_TIER_EPHEMERAL),
+                status=m.get("status", ACTIVE_STATUS),
+                canonical_key=m.get("canonical_key"),
+                manual_locked=bool(m.get("manual_locked", False)),
+                pending_review=bool(m.get("pending_review", False)),
+            )
+            mem_imported += 1
+
+        # ── 2. Open Loops ─────────────────────────────────────────
+        loop_imported = loop_skipped = 0
+        for lp in loops_in:
+            content = (lp.get("content") or "").strip()
+            if not content:
+                continue
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                exists = await conn.fetchval(
+                    "SELECT COUNT(*) FROM open_loops WHERE content = $1 AND status = 'open'",
+                    content,
+                )
+            if exists:
+                loop_skipped += 1
+                continue
+            await create_open_loop(
+                content=content,
+                loop_type=lp.get("loop_type", "promise"),
+                source_session=lp.get("source_session", "restore"),
+            )
+            loop_imported += 1
+
+        # ── 3. Snapshots（只還原 saved_as_card=TRUE 的）───────────
+        snap_imported = snap_skipped = 0
+        pool = await get_pool()
+        for cp in checkpoints_in:
+            if not cp.get("saved_as_card"):
+                continue
+            summary = (cp.get("summary_text") or "").strip()
+            if not summary:
+                continue
+            async with pool.acquire() as conn:
+                exists = await conn.fetchval(
+                    "SELECT COUNT(*) FROM conversation_checkpoints WHERE summary_text = $1",
+                    summary,
+                )
+                if exists:
+                    snap_skipped += 1
+                    continue
+                await conn.execute(
+                    """
+                    INSERT INTO conversation_checkpoints
+                        (session_id, version, summary_text, covers_until_msg_id,
+                         is_active, token_count, saved_as_card, card_title)
+                    VALUES ($1, $2, $3, $4, FALSE, $5, TRUE, $6)
+                    """,
+                    cp.get("session_id", "restored"),
+                    cp.get("version", 1),
+                    summary,
+                    cp.get("covers_until_msg_id", 0),
+                    cp.get("token_count"),
+                    cp.get("card_title"),
+                )
+                snap_imported += 1
+
+        return JSONResponse({
+            "memories":  {"imported": mem_imported,  "skipped": mem_skipped},
+            "loops":     {"imported": loop_imported, "skipped": loop_skipped},
+            "snapshots": {"imported": snap_imported, "skipped": snap_skipped},
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ============================================================
 # 新增 API：記憶升降級 / 鎖定 / Open Loops / Summaries
 # ============================================================
 
