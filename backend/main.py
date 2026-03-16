@@ -3015,7 +3015,9 @@ async def list_checkpoints_endpoint(session_id: str):
                 """,
                 session_id,
             )
-        return JSONResponse({"checkpoints": [dict(r) for r in rows]})
+        def _ser(r):
+            return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in dict(r).items()}
+        return JSONResponse({"checkpoints": [_ser(r) for r in rows]})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3038,7 +3040,9 @@ async def list_all_checkpoints_endpoint(limit: int = 50):
                 """,
                 limit,
             )
-        return JSONResponse({"checkpoints": [dict(r) for r in rows]})
+        def _ser(r):
+            return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in dict(r).items()}
+        return JSONResponse({"checkpoints": [_ser(r) for r in rows]})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3060,7 +3064,9 @@ async def list_snapshots_endpoint():
                 ORDER BY created_at DESC
                 """,
             )
-        return JSONResponse({"snapshots": [dict(r) for r in rows]})
+        def _ser(r):
+            return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in dict(r).items()}
+        return JSONResponse({"snapshots": [_ser(r) for r in rows]})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 

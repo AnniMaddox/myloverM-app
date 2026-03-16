@@ -1239,7 +1239,7 @@ def _memory_bank_select_clause() -> str:
         always_load, enabled, sort_order,
         source_ref, notes, content_hash,
         created_at, updated_at,
-        (embedding IS NOT NULL) AS has_embedding
+        FALSE AS has_embedding
     """
 
 
