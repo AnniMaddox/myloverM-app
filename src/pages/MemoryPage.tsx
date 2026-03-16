@@ -1065,18 +1065,74 @@ function GuideTab() {
       <p>設定存在本機，模型 key 還是放在 Railway，不會外洩。</p>
 
       <h2>🗂 對話向量化（長期 RAG）</h2>
-      <p>超過一定天數的舊對話會自動切成小段、計算 embedding，存進資料庫。</p>
+      <p>舊對話會自動切成小段、計算 embedding，讓 M 能搜尋語意相似的歷史內容。</p>
       <ul>
-        <li>每次聊天時，M 會自動搜尋語意相似的舊對話片段，注入到背景記憶裡</li>
-        <li>不用手動操作，後端每 24 小時自動跑一次</li>
-        <li>向量化的天數門檻、段落大小等，在 Railway 環境變數裡調整（<code>VECTORIZE_AFTER_DAYS</code> 等）</li>
+        <li>後端每 24 小時掃一次：找出「超過 N 天且還沒向量化」的 session → 向量化（每個 session 只處理一次）</li>
+        <li>不用手動操作，Railway 重啟時也會立即跑一次</li>
+        <li><code>VECTORIZE_AFTER_DAYS=3</code> 的意思是：session 結束 3 天後才向量化（給對話「冷卻」的時間）</li>
+        <li>不用擔心「新說的話漏掉」：由於 session 有 8 小時超時，你每次回來都是新 session，舊 session 只包含那段時間的對話，新 session 3 天後會再被向量化</li>
+        <li><code>OPENAI_API_KEY</code> 要在 Railway 設好才能計算 embedding；<code>VECTORIZE_CHUNK_SIZE</code> / <code>VECTORIZE_CHUNK_OVERLAP</code> 控制段落大小</li>
+      </ul>
+
+      <h2>🌐 聯網搜尋</h2>
+      <p>M 可以自動判斷是否需要查詢即時資訊，並呼叫 Tavily 搜尋引擎。</p>
+      <ul>
+        <li>不用手動觸發，M 自行判斷要不要搜尋</li>
+        <li>搜尋時聊天框會出現「搜尋中…」提示</li>
+        <li>需要在 Railway 設定 <code>TAVILY_API_KEY</code> 環境變數才會生效</li>
+        <li>沒設 key 的話 M 仍能回答，只是不會查即時資料</li>
+      </ul>
+
+      <h2>🖼 識圖（Vision）</h2>
+      <p>可以傳圖片給 M 讓他看。</p>
+      <ul>
+        <li>聊天框左邊的 📎 按鈕 → 選擇圖片 → 一起送出</li>
+        <li>M 會描述看到的內容，並結合你說的話回應</li>
+        <li>圖片只在最近 2 輪對話內有效，之後不再傳送（節省 token）</li>
+        <li>支援 jpg / png / webp 等常見格式</li>
       </ul>
 
       <h2>💾 備份建議</h2>
       <ul>
-        <li><strong>記憶</strong>：Railway 免費方案每月有睡眠限制，遷移前記得備份</li>
-        <li><strong>對話</strong>：只存在手機瀏覽器，換手機/清快取會消失，建議每週備份一次</li>
+        <li><strong>資料庫完整備份</strong>：在「備份」tab 的「⬇ 下載完整備份」，包含所有記憶、Loops、壓縮摘要，定期存一份到 iCloud / Google Drive</li>
+        <li><strong>對話記錄</strong>：只存在手機瀏覽器，換手機/清快取會消失，建議每週備份一次</li>
+        <li><strong>還原</strong>：換後端（重建 Railway）後，用「⬆ 匯入完整備份」一次恢復所有資料</li>
       </ul>
+
+      <h2>🗄 三種記憶系統比較</h2>
+      <p>M 有三個獨立的記憶機制，各司其職：</p>
+      <div className="mem-guide-tiers">
+        <div className="mem-guide-tier" style={{ borderColor: '#c9953a' }}>
+          <strong style={{ color: '#c9953a' }}>世界書（Worldbook）</strong>
+          <p>你手寫的條目，開關控制。<br/>
+          開著 → 每次對話全部注入，不受字數限制。<br/>
+          <em>適合：角色設定、行為規則、錨點（Anchor Tree）</em></p>
+        </div>
+        <div className="mem-guide-tier" style={{ borderColor: '#5b8dd9' }}>
+          <strong style={{ color: '#5b8dd9' }}>記憶銀行（Memory Bank）</strong>
+          <p>你手動整理的結構化資料，有兩種注入模式：<br/>
+          ① <strong>永載 ON</strong> → 每次都帶進去（最多 10 條 / 2000 字，由你勾選哪些要永載）<br/>
+          ② <strong>永載 OFF</strong> → 靠標籤或語意搜尋，跟你說的話相似才召回（每次最多 3 條）<br/>
+          <em>適合：關係記憶、事件紀錄、重要事實</em></p>
+        </div>
+        <div className="mem-guide-tier" style={{ borderColor: '#888' }}>
+          <strong style={{ color: '#aaa' }}>三層記憶（AI 自動管理）</strong>
+          <p>M 從對話中自動提取，分短期 / 穩定 / 永久三層。<br/>
+          evergreen 每次最多注入 12 條；stable 按語意搜尋注入。<br/>
+          <em>不需要你手動整理，AI 自己管</em></p>
+        </div>
+      </div>
+
+      <h2>📥 舊資料匯入</h2>
+      <p>如果你有舊系統留下的 snapshot / 錨點 / 事件紀錄，可以這樣搬移：</p>
+      <ul>
+        <li><strong>行為錨點（Anchor Tree）</strong> → 世界書：每個錨點新增一個條目，需要時開啟，有 keyword 的填入觸發詞。開啟的全部注入，沒有數量限制。</li>
+        <li><strong>關係記憶 / 事件紀錄</strong> → 記憶銀行：最重要的幾條勾「永載」，其他的加標籤靠語意召回。可手動在世界書 APP 逐條新增。</li>
+        <li><strong>角色設定 / if備忘錄</strong> → 最穩固的做法是直接貼進 Railway 的 <code>system_prompt.txt</code>，每次對話都生效，不受任何機制影響</li>
+      </ul>
+
+      <h2>🗑 管理壓縮摘要</h2>
+      <p>在「快照」tab → 子分頁「壓縮紀錄」，可以看到所有歷史摘要。每筆右邊有 🗑 刪除按鈕，舊的摘要不需要了可以直接刪掉。</p>
 
       <h2>❓ 常見問題</h2>
       <div className="mem-faq">
@@ -1088,6 +1144,12 @@ function GuideTab() {
         <div className="mem-faq-a">先到 Railway 控制台確認服務狀態。免費方案有月流量限制，用完會睡眠。</div>
         <div className="mem-faq-q">Q：換手機怎麼辦？</div>
         <div className="mem-faq-a">1. 在「備份」tab 下載對話 JSON，存到 iCloud/Google Drive。2. 新手機設定好後端 URL 和密鑰。3. 匯入對話 JSON。記憶在後端，不用另外遷移。</div>
+        <div className="mem-faq-q">Q：換後端（重建 Railway）怎麼辦？</div>
+        <div className="mem-faq-a">先在舊後端下載「完整備份」JSON。新後端設好後，在「備份」tab 用「⬆ 匯入完整備份」恢復所有記憶、Loops 和壓縮摘要。對話紀錄另外手動匯入。</div>
+        <div className="mem-faq-q">Q：對話向量化怎麼知道有沒有在跑？</div>
+        <div className="mem-faq-a">在瀏覽器開 後端URL + /api/vectorize/status 可以查狀態。OPENAI_API_KEY 要設好才能跑 embedding。</div>
+        <div className="mem-faq-q">Q：VECTORIZE_AFTER_DAYS 設 3，說話後 3 天的內容不會漏掉嗎？</div>
+        <div className="mem-faq-a">不會。因為 session 有 8 小時超時，你每次回來聊都是新 session。舊 session 被向量化後，新 session 的對話 3 天後也會被向量化。每個 session 只被處理一次，不會遺漏。</div>
       </div>
     </div>
   );
