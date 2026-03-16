@@ -2846,7 +2846,7 @@ async def restore_full(request: Request):
             )
             loop_imported += 1
 
-        # ── 3. Checkpoints（全部以 saved_as_card=TRUE 還原，供 Snapshot 召回）
+        # ── 3. Checkpoints（保留原始分類，壓縮摘要就是壓縮摘要）──────
         snap_imported = snap_skipped = 0
         pool = await get_pool()
         for cp in checkpoints_in:
@@ -2866,13 +2866,14 @@ async def restore_full(request: Request):
                     INSERT INTO conversation_checkpoints
                         (session_id, version, summary_text, covers_until_msg_id,
                          is_active, token_count, saved_as_card, card_title)
-                    VALUES ($1, $2, $3, $4, FALSE, $5, TRUE, $6)
+                    VALUES ($1, $2, $3, $4, FALSE, $5, $6, $7)
                     """,
                     cp.get("session_id", "restored"),
                     cp.get("version", 1),
                     summary,
                     cp.get("covers_until_msg_id", 0),
                     cp.get("token_count"),
+                    bool(cp.get("saved_as_card", False)),
                     cp.get("card_title"),
                 )
                 snap_imported += 1
