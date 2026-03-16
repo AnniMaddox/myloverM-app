@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { API_BASE_LS_KEY, API_SECRET_LS_KEY, CONTEXT_TURNS_LS_KEY, TEMPERATURE_LS_KEY, TOP_P_LS_KEY, USER_NAME_LS_KEY, THINKING_BUDGET_LS_KEY, checkHealth, fetchBackendModel, listCheckpoints, saveSnapshot, type CheckpointRecord } from '../api'
+import { API_BASE_LS_KEY, API_SECRET_LS_KEY, CONTEXT_TURNS_LS_KEY, TEMPERATURE_LS_KEY, TOP_P_LS_KEY, USER_NAME_LS_KEY, THINKING_BUDGET_LS_KEY, EXTRACT_INTERVAL_LS_KEY, checkHealth, fetchBackendModel, listCheckpoints, saveSnapshot, type CheckpointRecord } from '../api'
 import { formatRouteLabel, loadModelRouting, MODEL_ROUTING_CHANGE_EVENT } from '../modelRouting'
 import MemoryBankTab from './MemoryBankTab'
 import type { HealthStatus, StoredChat, DisplayMessage } from '../types'
@@ -100,6 +100,17 @@ function loadThinkingBudget(): number | null {
   return null // null = 不啟用
 }
 
+function loadExtractInterval(): number {
+  try {
+    const saved = localStorage.getItem(EXTRACT_INTERVAL_LS_KEY)
+    if (saved !== null) {
+      const n = parseInt(saved, 10)
+      if (!isNaN(n) && n >= 0) return n
+    }
+  } catch { /* ignore */ }
+  return 1 // 預設每輪提取
+}
+
 type HealthState =
   | { status: 'idle' }
   | { status: 'checking' }
@@ -121,6 +132,7 @@ export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onI
   const [temperature, setTemperature]   = useState(loadTemperature)
   const [topP, setTopP]                 = useState<number | null>(loadTopP)
   const [thinkingBudget, setThinkingBudget] = useState<number | null>(loadThinkingBudget)
+  const [extractInterval, setExtractInterval] = useState(loadExtractInterval)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [userName, setUserName] = useState(() => {
     try { return localStorage.getItem(USER_NAME_LS_KEY) ?? '' } catch { return '' }
@@ -149,6 +161,11 @@ export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onI
   function handleTemperatureChange(val: number) {
     setTemperature(val)
     try { localStorage.setItem(TEMPERATURE_LS_KEY, String(val)) } catch { /* ignore */ }
+  }
+
+  function handleExtractIntervalChange(val: number) {
+    setExtractInterval(val)
+    try { localStorage.setItem(EXTRACT_INTERVAL_LS_KEY, String(val)) } catch { /* ignore */ }
   }
 
   // ── Backup helpers ──────────────────────────────────────
@@ -603,6 +620,28 @@ export default function SidePanel({ activeChat, onClose, onOpenModelRouting, onI
               />
               <p className="sp-hint">
                 0.0 = 穩定保守，1.0 = 預設，2.0 = 創意跳脫。
+              </p>
+            </div>
+
+            {/* 記憶提取間隔 */}
+            <div>
+              <label className="sp-label">
+                記憶提取間隔&nbsp;
+                <span style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {extractInterval === 0 ? '停用' : extractInterval === 1 ? '每輪' : `每 ${extractInterval} 輪`}
+                </span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={extractInterval}
+                onChange={(e) => handleExtractIntervalChange(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--accent)' }}
+              />
+              <p className="sp-hint">
+                0 = 停用，1 = 每輪都提取（預設），N = 每 N 輪提取一次。數字越大消耗越少 API。
               </p>
             </div>
 

@@ -230,27 +230,49 @@ async def _should_web_search(msg: str, route: ProviderRoute | None) -> str | Non
     msg_stripped = msg.strip()
     if not msg_stripped:
         return None
-    if route is None:
-        return None
     try:
         prompt = _SEARCH_JUDGE_PROMPT.format(msg=msg_stripped)
-        result = await create_chat_completion_with_route(
-            route,
-            [{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=64,
-        )
-        # 從各 provider 回應中取出文字
         raw = ""
-        if isinstance(result, dict):
-            choices = result.get("choices") or []
-            if choices:
-                raw = (choices[0].get("message") or {}).get("content") or ""
-            else:
-                # Anthropic format
-                content = result.get("content") or []
-                if content:
-                    raw = (content[0].get("text") or "") if isinstance(content[0], dict) else ""
+        if route is not None:
+            result = await create_chat_completion_with_route(
+                route,
+                [{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=64,
+            )
+            # 從各 provider 回應中取出文字
+            if isinstance(result, dict):
+                choices = result.get("choices") or []
+                if choices:
+                    raw = (choices[0].get("message") or {}).get("content") or ""
+                else:
+                    # Anthropic format
+                    content = result.get("content") or []
+                    if content:
+                        raw = (content[0].get("text") or "") if isinstance(content[0], dict) else ""
+        else:
+            # Legacy path：直接呼叫 API_BASE_URL
+            legacy_headers = {
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+            }
+            if "openrouter" in API_BASE_URL:
+                legacy_headers["HTTP-Referer"] = EXTRA_REFERER
+                legacy_headers["X-Title"] = EXTRA_TITLE
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    API_BASE_URL,
+                    headers=legacy_headers,
+                    json={
+                        "model": DEFAULT_MODEL,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.0,
+                        "max_tokens": 64,
+                    },
+                )
+                resp.raise_for_status()
+                data_raw = resp.json()
+                raw = ((data_raw.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
         raw = raw.strip()
         # 嘗試解析 JSON
         if raw.startswith("```"):
@@ -1213,10 +1235,13 @@ async def process_memories_background(
     context_messages: list | None = None,
     has_stable_session_id: bool = False,
     model_routes: dict[str, ProviderRoute] | None = None,
+    extract_interval: int | None = None,
 ):
     """
     后台异步：存储对话 + 提取记忆（不阻塞主流程）
+    extract_interval：覆蓋 MEMORY_EXTRACT_INTERVAL（0=禁用，1=每輪，N=每N輪）
     """
+    interval = extract_interval if extract_interval is not None else MEMORY_EXTRACT_INTERVAL
     try:
         route_map = model_routes or {}
         extraction_route = route_map.get("extraction")
@@ -1225,16 +1250,16 @@ async def process_memories_background(
         await save_message(session_id, "user", user_msg, model)
         await save_message(session_id, "assistant", assistant_msg, model)
 
-        if MEMORY_EXTRACT_INTERVAL == 0:
+        if interval == 0:
             if has_stable_session_id:
                 await summarize_stale_sessions(route=summary_route)
             print("⏭️  记忆自动提取已禁用，跳过")
             return
 
         # 從 DB 讀取未提取的 raw turns（不依賴前端送來的 context_messages）
-        if MEMORY_EXTRACT_INTERVAL > 1:
+        if interval > 1:
             unextracted_count = await count_unextracted_messages(session_id)
-            threshold = MEMORY_EXTRACT_INTERVAL * 2
+            threshold = interval * 2
             if unextracted_count < threshold:
                 if has_stable_session_id:
                     await summarize_stale_sessions(route=summary_route)
@@ -1242,7 +1267,7 @@ async def process_memories_background(
                 return
             print(f"📝 [{session_id[:8]}] 未提取 {unextracted_count} 條，執行提取")
 
-        raw_turns = await get_unextracted_messages(session_id, limit=max(MEMORY_EXTRACT_INTERVAL * 2 + 4, 20))
+        raw_turns = await get_unextracted_messages(session_id, limit=max(interval * 2 + 4, 20))
         if not raw_turns:
             if has_stable_session_id:
                 await summarize_stale_sessions(route=summary_route)
@@ -1607,6 +1632,17 @@ async def chat_completions(request: Request):
         except (TypeError, ValueError):
             pass
 
+    # 記憶提取間隔覆蓋（0=禁用，1=每輪，N=每N輪）
+    extract_interval_override: int | None = None
+    raw_extract = body.pop("_extract_interval", None)
+    if raw_extract is not None:
+        try:
+            v = int(raw_extract)
+            if v >= 0:
+                extract_interval_override = v
+        except (TypeError, ValueError):
+            pass
+
     # ---------- 模型处理 ----------
     model = chat_route.model if chat_route else body.get("model", DEFAULT_MODEL)
     if not model:
@@ -1706,6 +1742,7 @@ async def chat_completions(request: Request):
                     model_routes,
                     used_checkpoint=used_checkpoint,
                     thinking_budget=thinking_budget,
+                    extract_interval=extract_interval_override,
                 ),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
@@ -1721,6 +1758,7 @@ async def chat_completions(request: Request):
                 has_stable_session_id,
                 model_routes,
                 used_checkpoint=used_checkpoint,
+                extract_interval=extract_interval_override,
             ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
@@ -1756,6 +1794,7 @@ async def chat_completions(request: Request):
                         context_messages=original_messages,
                         has_stable_session_id=has_stable_session_id,
                         model_routes=model_routes,
+                        extract_interval=extract_interval_override,
                     )
                 )
 
@@ -1764,7 +1803,7 @@ async def chat_completions(request: Request):
 
         async with httpx.AsyncClient(timeout=300) as client:
             response = await client.post(API_BASE_URL, headers=headers, json=body)
-            
+
             if response.status_code == 200:
                 resp_data = response.json()
                 assistant_msg = ""
@@ -1772,7 +1811,7 @@ async def chat_completions(request: Request):
                     assistant_msg = resp_data["choices"][0]["message"]["content"]
                 except (KeyError, IndexError):
                     pass
-                
+
                 if MEMORY_ENABLED and user_message and assistant_msg:
                     asyncio.create_task(
                         process_memories_background(
@@ -1783,6 +1822,7 @@ async def chat_completions(request: Request):
                             context_messages=original_messages,
                             has_stable_session_id=has_stable_session_id,
                             model_routes=model_routes,
+                            extract_interval=extract_interval_override,
                         )
                     )
                 
@@ -1806,6 +1846,7 @@ async def stream_route_and_capture(
     model_routes: dict[str, ProviderRoute] | None = None,
     used_checkpoint: bool = False,
     thinking_budget: int | None = None,
+    extract_interval: int | None = None,
 ):
     """真正的 token-by-token 串流（三個 provider 都支援），同時捕獲完整回覆用於記憶提取。"""
     full_response: list[str] = []
@@ -1899,6 +1940,7 @@ async def stream_route_and_capture(
                 context_messages=original_messages,
                 has_stable_session_id=has_stable_session_id,
                 model_routes=model_routes,
+                extract_interval=extract_interval,
             )
         )
 
@@ -1913,12 +1955,62 @@ async def stream_and_capture(
     has_stable_session_id: bool = False,
     model_routes: dict[str, ProviderRoute] | None = None,
     used_checkpoint: bool = False,
+    extract_interval: int | None = None,
 ):
     """流式响应 + 捕获完整回复（OpenRouter / legacy 路徑）"""
     full_response = []
     # 讓 OpenRouter 在串流結尾帶 usage 資料
     body = dict(body)
     body.setdefault("stream_options", {"include_usage": True})
+
+    # ── 注入當前時間到最後一則 user 訊息 ──────────────────────
+    now_ts = local_now().strftime("%Y-%m-%d %H:%M")
+    time_prefix = f"[現在時間：{now_ts}]\n"
+    messages = list(body.get("messages", []))
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            orig = messages[i].get("content", "")
+            if isinstance(orig, str):
+                messages[i] = {**messages[i], "content": time_prefix + orig}
+            elif isinstance(orig, list):
+                new_parts = list(orig)
+                for j, part in enumerate(new_parts):
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        new_parts[j] = {**part, "text": time_prefix + part["text"]}
+                        break
+                messages[i] = {**messages[i], "content": new_parts}
+            break
+    # ──────────────────────────────────────────────────────────
+
+    # ── 聯網搜尋（Tavily）──────────────────────────────────────
+    search_query = await _should_web_search(user_message, None)
+    if search_query:
+        yield f"data: {json.dumps({'_searching': True, 'query': search_query}, ensure_ascii=False)}\n\n"
+        search_result = await _tavily_search(search_query)
+        now_str = datetime.now(timezone(timedelta(hours=TIMEZONE_HOURS))).strftime("%Y-%m-%d %H:%M")
+        search_injection = (
+            f"\n\n[聯網搜尋結果 - {now_str}]\n"
+            f"查詢：{search_query}\n\n"
+            f"{search_result}\n\n"
+            f"（以上為即時搜尋結果，請根據這些資訊回答。）"
+        )
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                orig_content = messages[i].get("content", "")
+                if isinstance(orig_content, str):
+                    messages[i] = {**messages[i], "content": orig_content + search_injection}
+                elif isinstance(orig_content, list):
+                    new_parts = list(orig_content)
+                    for j, part in enumerate(new_parts):
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            new_parts[j] = {**part, "text": part["text"] + search_injection}
+                            break
+                    else:
+                        new_parts.append({"type": "text", "text": search_injection})
+                    messages[i] = {**messages[i], "content": new_parts}
+                break
+    body["messages"] = messages
+    # ──────────────────────────────────────────────────────────
 
     async with httpx.AsyncClient(timeout=300) as client:
         async with client.stream("POST", API_BASE_URL, headers=headers, json=body) as response:
@@ -1954,6 +2046,7 @@ async def stream_and_capture(
                 context_messages=original_messages,
                 has_stable_session_id=has_stable_session_id,
                 model_routes=model_routes,
+                extract_interval=extract_interval,
             )
         )
 

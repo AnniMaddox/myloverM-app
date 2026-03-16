@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import MessageList from './MessageList'
 import Composer from './Composer'
-import { streamChat, MODEL_LS_KEY, CONTEXT_TURNS_LS_KEY, TEMPERATURE_LS_KEY, TOP_P_LS_KEY, USER_NAME_LS_KEY, THINKING_BUDGET_LS_KEY, fetchBackendModel, createCheckpoint } from '../api'
+import { streamChat, MODEL_LS_KEY, CONTEXT_TURNS_LS_KEY, TEMPERATURE_LS_KEY, TOP_P_LS_KEY, USER_NAME_LS_KEY, THINKING_BUDGET_LS_KEY, EXTRACT_INTERVAL_LS_KEY, fetchBackendModel, createCheckpoint } from '../api'
 import { createClientId } from '../id'
 import { formatRouteLabel, loadModelRouting, MODEL_ROUTING_CHANGE_EVENT } from '../modelRouting'
 import { resolveSessionId } from '../session'
@@ -67,6 +67,17 @@ function getThinkingBudget(): number | undefined {
     if (saved !== null) {
       const n = parseInt(saved, 10)
       if (!isNaN(n) && n >= 1024) return n
+    }
+  } catch { /* ignore */ }
+  return undefined
+}
+
+function getExtractInterval(): number | undefined {
+  try {
+    const saved = localStorage.getItem(EXTRACT_INTERVAL_LS_KEY)
+    if (saved !== null) {
+      const n = parseInt(saved, 10)
+      if (!isNaN(n) && n >= 0) return n
     }
   } catch { /* ignore */ }
   return undefined
@@ -296,6 +307,7 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
         thinking_budget: getThinkingBudget(),
         recall_card_ids: recallCardIds.length > 0 ? recallCardIds : undefined,
         model_routing: modelRouting,
+        extract_interval: getExtractInterval(),
       })) {
         if (event.type === 'searching') {
           isSearching = true

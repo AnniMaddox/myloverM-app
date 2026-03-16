@@ -16,14 +16,15 @@ import type {
   StreamEvent,
 } from './types'
 
-export const API_BASE_LS_KEY      = 'myloverM-api-base-url'
-export const API_SECRET_LS_KEY    = 'myloverM-api-secret'
-export const MODEL_LS_KEY         = 'myloverM-model'
-export const CONTEXT_TURNS_LS_KEY = 'myloverM-context-turns'
-export const TEMPERATURE_LS_KEY   = 'myloverM-temperature'
-export const TOP_P_LS_KEY         = 'myloverM-top-p'
-export const USER_NAME_LS_KEY     = 'myloverM-user-name'
+export const API_BASE_LS_KEY        = 'myloverM-api-base-url'
+export const API_SECRET_LS_KEY      = 'myloverM-api-secret'
+export const MODEL_LS_KEY           = 'myloverM-model'
+export const CONTEXT_TURNS_LS_KEY   = 'myloverM-context-turns'
+export const TEMPERATURE_LS_KEY     = 'myloverM-temperature'
+export const TOP_P_LS_KEY           = 'myloverM-top-p'
+export const USER_NAME_LS_KEY       = 'myloverM-user-name'
 export const THINKING_BUDGET_LS_KEY = 'myloverM-thinking-budget'
+export const EXTRACT_INTERVAL_LS_KEY = 'myloverM-extract-interval'
 
 function getBaseUrl(): string {
   try {
@@ -105,6 +106,7 @@ export async function* streamChat(input: {
   thinking_budget?: number // Anthropic extended thinking budget（>= 1024 才生效）
   recall_card_ids?: number[] // 勾選召回的 Snapshot 卡片 ID
   model_routing?: ModelRoutingConfig
+  extract_interval?: number  // 記憶提取間隔覆蓋（0=禁用，1=每輪，N=每N輪）
 }): AsyncGenerator<StreamEvent, void, unknown> {
 
   const body: Record<string, unknown> = {
@@ -130,6 +132,9 @@ export async function* streamChat(input: {
   }
   if (input.model_routing && Object.keys(input.model_routing).length > 0) {
     body.model_routing = input.model_routing
+  }
+  if (input.extract_interval !== undefined) {
+    body._extract_interval = input.extract_interval
   }
 
   let res: Response
