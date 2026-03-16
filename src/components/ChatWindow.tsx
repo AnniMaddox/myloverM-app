@@ -138,19 +138,24 @@ function countLaterUserTurns(messages: DisplayMessage[], index: number): number 
   return count
 }
 
+function getMsgImageUrls(msg: DisplayMessage): string[] {
+  if (msg.imageUrls && msg.imageUrls.length > 0) return msg.imageUrls
+  if (msg.imageUrl) return [msg.imageUrl]
+  return []
+}
+
 function buildChatContent(
   text: string,
-  imageUrl?: string,
-  keepImage: boolean = false,
+  imageUrls: string[] = [],
 ): ChatMessageContent {
   const trimmedText = text.trim()
 
-  if (keepImage && imageUrl) {
+  if (imageUrls.length > 0) {
     const parts: ChatContentPart[] = []
-    if (trimmedText) {
-      parts.push({ type: 'text', text: trimmedText })
+    if (trimmedText) parts.push({ type: 'text', text: trimmedText })
+    for (const url of imageUrls) {
+      parts.push({ type: 'image_url', image_url: { url } })
     }
-    parts.push({ type: 'image_url', image_url: { url: imageUrl } })
     return parts
   }
 
@@ -175,7 +180,7 @@ interface Props {
 
 export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onUpdateChat }: Props) {
   const [input, setInput] = useState('')
-  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null)
+  const [pendingImageUrls, setPendingImageUrls] = useState<string[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [isCheckpointing, setIsCheckpointing] = useState(false)
   const [checkpointPreview, setCheckpointPreview] = useState<string | null>(null)
@@ -220,7 +225,7 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
   useEffect(() => {
     setQuotedMessage(null)
     setEditingFromIndex(null)
-    setPendingImageUrl(null)
+    setPendingImageUrls([])
     setSelectMode(false)
     setSelectedIds(new Set())
     setConfirmDialog(null)
@@ -232,7 +237,7 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
     displayText: string,
     quotedRef: QuotedMessageRef | null,
     baseMessages: DisplayMessage[],
-    imageUrl?: string | null,
+    imageUrls?: string[] | null,
   ) => {
     if (!activeChat || isStreaming) return
 
@@ -240,14 +245,14 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
 
     const { sessionId, renewed } = resolveSessionId(activeChat)
     const trimmedText = displayText.trim()
-    const normalizedImageUrl = imageUrl?.trim() || undefined
+    const normalizedImageUrls = imageUrls && imageUrls.length > 0 ? imageUrls : undefined
 
     const userMsg: DisplayMessage = {
       id: createClientId(),
       role: 'user',
       content: trimmedText,
       createdAt: Date.now(),
-      ...(normalizedImageUrl ? { imageUrl: normalizedImageUrl, hasImage: true } : {}),
+      ...(normalizedImageUrls ? { imageUrls: normalizedImageUrls, hasImage: true } : {}),
       ...(quotedRef ? { quotedMessageRef: quotedRef } : {}),
     }
 
@@ -273,10 +278,12 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
 
     const payload: ChatMessage[] = [
       ...trimmedPrev.flatMap((m, index) => {
+        const msgImgUrls = getMsgImageUrls(m)
+        const keepImages = msgImgUrls.length > 0 &&
+          countLaterUserTurns(trimmedPrev, index) <= IMAGE_CONTEXT_USER_TURNS
         const content = buildChatContent(
           buildQuotedText(m.content, m.quotedMessageRef ?? null),
-          m.imageUrl,
-          Boolean(m.imageUrl) && countLaterUserTurns(trimmedPrev, index) <= IMAGE_CONTEXT_USER_TURNS,
+          keepImages ? msgImgUrls : [],
         )
         if (!hasChatContent(content)) return []
         return [{
@@ -286,7 +293,7 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
       }),
       {
         role: 'user' as const,
-        content: buildChatContent(apiContent, normalizedImageUrl, Boolean(normalizedImageUrl)),
+        content: buildChatContent(apiContent, normalizedImageUrls ?? []),
       },
     ]
 
@@ -365,12 +372,12 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
   // ── 一般送訊息 ───────────────────────────────────────────
 
   const sendMessage = useCallback(async () => {
-    if (!activeChat || (!input.trim() && !pendingImageUrl) || isStreaming) return
+    if (!activeChat || (!input.trim() && pendingImageUrls.length === 0) || isStreaming) return
 
     const text = input.trim()
     setInput('')
-    const imageUrl = pendingImageUrl
-    setPendingImageUrl(null)
+    const imgUrls = pendingImageUrls.length > 0 ? pendingImageUrls : null
+    setPendingImageUrls([])
 
     const base = editingFromIndex !== null
       ? activeChat.messages.slice(0, editingFromIndex)
@@ -385,8 +392,8 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
     setEditingFromIndex(null)
     setQuotedMessage(null)
 
-    await performSend(text, qRef, base, imageUrl)
-  }, [activeChat, input, pendingImageUrl, isStreaming, editingFromIndex, quotedMessage, performSend])
+    await performSend(text, qRef, base, imgUrls)
+  }, [activeChat, input, pendingImageUrls, isStreaming, editingFromIndex, quotedMessage, performSend])
 
   // ── Action handlers ──────────────────────────────────────
 
@@ -446,7 +453,8 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
     const base = activeChat.messages.slice(0, userMsgIdx)
     const qRef = userMsg.quotedMessageRef ?? null
 
-    await performSend(userMsg.content, qRef, base, userMsg.imageUrl)
+    const msgImgUrls = getMsgImageUrls(userMsg)
+    await performSend(userMsg.content, qRef, base, msgImgUrls.length > 0 ? msgImgUrls : null)
   }, [activeChat, confirmDialog, performSend])
 
   const handleBatchDelete = useCallback(() => {
@@ -699,8 +707,8 @@ export default function ChatWindow({ onOpenSidebar, onOpenPanel, activeChat, onU
             value={input}
             onChange={setInput}
             onSend={sendMessage}
-            imageUrl={pendingImageUrl}
-            onImageChange={setPendingImageUrl}
+            imageUrls={pendingImageUrls}
+            onImageChange={setPendingImageUrls}
             disabled={isStreaming || !activeChat}
             quotedMessage={quotedMessage}
             onClearQuote={() => setQuotedMessage(null)}

@@ -14,6 +14,12 @@ interface Props {
   onReroll?: (msg: DisplayMessage) => void
 }
 
+function getMsgImageUrls(msg: import('../types').DisplayMessage): string[] {
+  if (msg.imageUrls && msg.imageUrls.length > 0) return msg.imageUrls
+  if (msg.imageUrl) return [msg.imageUrl]
+  return []
+}
+
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString('zh-TW', {
     hour: '2-digit',
@@ -57,7 +63,8 @@ export default function MessageList({
   return (
     <div className="message-list" onClick={() => setActiveActionId(null)}>
       {messages.map((msg, index) => {
-        const showImage = msg.role === 'user' && (Boolean(msg.imageUrl) || Boolean(msg.hasImage))
+        const msgImageUrls = getMsgImageUrls(msg)
+        const showImage = msg.role === 'user' && (msgImageUrls.length > 0 || Boolean(msg.hasImage))
         const showBubble = Boolean(msg.quotedMessageRef || msg.content || msg.isStreaming || msg.isError)
 
         return (
@@ -96,7 +103,7 @@ export default function MessageList({
             >
               {showImage && (
                 <div
-                  className={`image-card image-card--${msg.role}`}
+                  className={`image-grid image-grid--${msg.role}`}
                   onClick={(e) => {
                     if (selectMode || msg.isStreaming) return
                     e.stopPropagation()
@@ -104,10 +111,16 @@ export default function MessageList({
                   }}
                   style={{ cursor: selectMode || msg.isStreaming ? 'default' : 'pointer' }}
                 >
-                  {msg.imageUrl ? (
-                    <img src={msg.imageUrl} alt="使用者傳送的圖片" className="image-card__img" />
+                  {msgImageUrls.length > 0 ? (
+                    msgImageUrls.map((url, i) => (
+                      <div key={i} className="image-card" style={{ width: msgImageUrls.length > 1 ? 'min(140px, 42vw)' : 'min(280px, 72vw)' }}>
+                        <img src={url} alt={`使用者傳送的圖片 ${i + 1}`} className="image-card__img" />
+                      </div>
+                    ))
                   ) : (
-                    <div className="image-card__placeholder">已傳送圖片，原圖未保留</div>
+                    <div className="image-card">
+                      <div className="image-card__placeholder">已傳送圖片，原圖未保留</div>
+                    </div>
                   )}
                 </div>
               )}
@@ -277,20 +290,21 @@ export default function MessageList({
 }
 
 const MSG_STYLES = `
+.image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.image-grid--user { justify-content: flex-end; }
+.image-grid--assistant { justify-content: flex-start; }
 .image-card {
   width: min(280px, 72vw);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
   border: 1px solid rgba(255,255,255,0.08);
-  margin-bottom: 8px;
   background: rgba(255,255,255,0.04);
-}
-.image-card--assistant {
-  align-self: flex-start;
-}
-.image-card--user {
-  align-self: flex-end;
 }
 .image-card__img {
   display: block;

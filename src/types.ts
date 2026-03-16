@@ -37,7 +37,8 @@ export interface DisplayMessage {
   role: MessageRole
   content: string
   createdAt: number
-  imageUrl?: string
+  imageUrl?: string        // backward compat: old single-image messages
+  imageUrls?: string[]     // new: multiple images
   imageMemo?: string
   hasImage?: boolean
   isStreaming?: boolean

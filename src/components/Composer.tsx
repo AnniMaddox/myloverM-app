@@ -5,8 +5,8 @@ interface Props {
   value: string
   onChange: (v: string) => void
   onSend: () => void
-  imageUrl?: string | null
-  onImageChange?: (imageUrl: string | null) => void
+  imageUrls?: string[]
+  onImageChange?: (imageUrls: string[]) => void
   disabled?: boolean
   quotedMessage?: DisplayMessage | null
   onClearQuote?: () => void
@@ -17,7 +17,7 @@ export default function Composer({
   value,
   onChange,
   onSend,
-  imageUrl,
+  imageUrls,
   onImageChange,
   disabled,
   quotedMessage,
@@ -25,7 +25,8 @@ export default function Composer({
   userName,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const txtInputRef = useRef<HTMLInputElement>(null)
 
   // 隨內容自動調整高度，最高 160px
   useEffect(() => {
@@ -52,18 +53,36 @@ export default function Composer({
         : quotedMessage.content)
     : ''
 
-  async function handleFileChange(file: File | null) {
-    if (!file || !onImageChange) return
-    if (!file.type.startsWith('image/')) return
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : null
-      onImageChange(result)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+  async function handleImageFilesChange(files: FileList | null) {
+    if (!files || !onImageChange) return
+    const results: string[] = []
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      results.push(url)
     }
-    reader.readAsDataURL(file)
+    if (results.length > 0) {
+      onImageChange([...(imageUrls ?? []), ...results])
+    }
+    if (imageInputRef.current) imageInputRef.current.value = ''
   }
+
+  async function handleTxtFileChange(file: File | null) {
+    if (!file) return
+    const content = await file.text()
+    const sep = '─'.repeat(20)
+    const block = `【附件：${file.name}】\n${sep}\n${content}\n${sep}\n\n`
+    onChange(block + value)
+    if (txtInputRef.current) txtInputRef.current.value = ''
+    textareaRef.current?.focus()
+  }
+
+  const hasImages = (imageUrls ?? []).length > 0
 
   return (
     <div className="composer-outer">
@@ -97,36 +116,61 @@ export default function Composer({
         </div>
       )}
 
-      {imageUrl && (
-        <div className="composer-image-preview">
-          <img src={imageUrl} alt="待送出的圖片" className="composer-image-preview__img" />
-          <button
-            className="composer-image-preview__remove"
-            onClick={() => onImageChange?.(null)}
-            aria-label="移除圖片"
-            disabled={disabled}
-          >
-            ✕
-          </button>
+      {/* 多圖預覽 */}
+      {hasImages && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {(imageUrls ?? []).map((url, i) => (
+            <div key={i} className="composer-image-preview">
+              <img src={url} alt={`待送出的圖片 ${i + 1}`} className="composer-image-preview__img" />
+              <button
+                className="composer-image-preview__remove"
+                onClick={() => onImageChange?.((imageUrls ?? []).filter((_, j) => j !== i))}
+                aria-label="移除圖片"
+                disabled={disabled}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
       <div className="composer">
+        {/* 圖片 input（multiple） */}
         <input
-          ref={fileInputRef}
+          ref={imageInputRef}
           type="file"
           accept="image/*"
+          multiple
           style={{ display: 'none' }}
-          onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+          onChange={(e) => handleImageFilesChange(e.target.files)}
+        />
+        {/* TXT input */}
+        <input
+          ref={txtInputRef}
+          type="file"
+          accept=".txt,text/plain"
+          style={{ display: 'none' }}
+          onChange={(e) => handleTxtFileChange(e.target.files?.[0] ?? null)}
         />
         <button
           className="composer-attach"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => imageInputRef.current?.click()}
           disabled={disabled}
           aria-label="加入圖片"
           type="button"
         >
           📷
+        </button>
+        <button
+          className="composer-attach"
+          onClick={() => txtInputRef.current?.click()}
+          disabled={disabled}
+          aria-label="加入文字檔"
+          type="button"
+          style={{ fontSize: 16 }}
+        >
+          📄
         </button>
         <textarea
           ref={textareaRef}
@@ -140,7 +184,7 @@ export default function Composer({
         <button
           className="composer-send"
           onClick={onSend}
-          disabled={disabled || (!value.trim() && !imageUrl)}
+          disabled={disabled || (!value.trim() && !hasImages)}
           aria-label="送出"
         >
           ↑
@@ -167,27 +211,26 @@ const COMPOSER_STYLES = `
 }
 .composer-image-preview {
   position: relative;
-  align-self: flex-end;
-  max-width: min(240px, 72vw);
+  max-width: min(120px, 36vw);
 }
 .composer-image-preview__img {
   display: block;
   width: 100%;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
 }
 .composer-image-preview__remove {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   background: rgba(18, 22, 34, 0.78);
   color: #fff;
   border: 1px solid rgba(255,255,255,0.12);
-  font-size: 14px;
+  font-size: 12px;
 }
 .composer-attach {
   flex: 0 0 auto;
