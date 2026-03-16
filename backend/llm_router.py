@@ -157,7 +157,7 @@ def _iter_openai_message_parts(content: Any) -> list[dict[str, Any]]:
                 else:
                     url = str(image_url or "").strip()
                 if url:
-                    normalized.append({"type": "image_url", "url": url})
+                    normalized.append({"type": "image_url", "image_url": {"url": url}})
         return normalized
     text = str(content or "").strip()
     return [{"type": "text", "text": text}] if text else []
