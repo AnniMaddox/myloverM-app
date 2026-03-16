@@ -1244,8 +1244,9 @@ async def process_memories_background(
     interval = extract_interval if extract_interval is not None else MEMORY_EXTRACT_INTERVAL
     try:
         route_map = model_routes or {}
-        extraction_route = route_map.get("extraction")
-        summary_route = route_map.get("summary")
+        # extraction / summary 沒有獨立設定時，fallback 用 chat route
+        extraction_route = route_map.get("extraction") or route_map.get("summary") or route_map.get("chat")
+        summary_route = route_map.get("summary") or route_map.get("chat")
 
         await save_message(session_id, "user", user_msg, model)
         await save_message(session_id, "assistant", assistant_msg, model)
@@ -2915,8 +2916,8 @@ async def create_checkpoint_endpoint(request: Request):
 
     body = await request.json()
     model_routes = get_effective_routes(body.get("model_routing"))
-    extraction_route = model_routes.get("extraction")
-    summary_route = model_routes.get("summary")
+    extraction_route = model_routes.get("extraction") or model_routes.get("summary") or model_routes.get("chat")
+    summary_route = model_routes.get("summary") or model_routes.get("chat")
     session_id = str(body.get("session_id", "")).strip()
     if not session_id:
         return JSONResponse({"error": "缺少 session_id"}, status_code=400)
