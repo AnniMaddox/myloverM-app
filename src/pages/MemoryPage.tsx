@@ -1152,7 +1152,15 @@ function BankTab() {
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [bankLimits, setBankLimits] = useState({ max_always_inject: 10, max_always_chars: 2000 });
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    apiFetch('/api/bank-config')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setBankLimits(d as { max_always_inject: number; max_always_chars: number }); })
+      .catch(() => { /* keep defaults */ });
+  }, []);
 
   const loadItems = useCallback(async () => {
     setLoading(true); setError('');
@@ -1180,7 +1188,8 @@ function BankTab() {
   }, [items, query]);
 
   const alwaysStats = useMemo(() => {
-    const MAX_INJECT = 10, MAX_CHARS = 2000;
+    const MAX_INJECT = bankLimits.max_always_inject;
+    const MAX_CHARS = bankLimits.max_always_chars;
     const alwaysItems = items.filter(i => i.always_load && i.enabled).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     let injected = 0, chars = 0, skipped = 0;
     for (const item of alwaysItems) {
@@ -1189,8 +1198,8 @@ function BankTab() {
       if (chars + c > MAX_CHARS) { skipped++; continue; }
       injected++; chars += c;
     }
-    return { total: alwaysItems.length, injected, chars, skipped };
-  }, [items]);
+    return { total: alwaysItems.length, injected, chars, skipped, maxChars: MAX_CHARS };
+  }, [items, bankLimits]);
 
   function resetEditor() { setEditingItem(null); setForm({ ...EMPTY_BANK_FORM }); setShowForm(false); }
   function startCreate() { setMessage(''); setEditingItem(null); setForm({ ...EMPTY_BANK_FORM }); setShowForm(true); }
@@ -1313,7 +1322,7 @@ function BankTab() {
           border: `1px solid ${alwaysStats.skipped > 0 ? 'rgba(255,100,80,0.3)' : 'rgba(80,180,120,0.25)'}`,
           color: alwaysStats.skipped > 0 ? '#ff8070' : '#80d4a0',
         }}>
-          永載預覽：{alwaysStats.injected} / {alwaysStats.total} 條注入・{alwaysStats.chars} / 2000 字
+          永載預覽：{alwaysStats.injected} / {alwaysStats.total} 條注入・{alwaysStats.chars} / {alwaysStats.maxChars} 字
           {alwaysStats.skipped > 0 && `・⚠️ ${alwaysStats.skipped} 條被截（超字數上限）`}
         </div>
       )}

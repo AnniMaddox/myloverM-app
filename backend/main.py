@@ -1405,6 +1405,14 @@ async def health_check():
     }
 
 
+@app.get("/api/bank-config")
+async def bank_config():
+    return JSONResponse({
+        "max_always_inject": MAX_BANK_ALWAYS_INJECT,
+        "max_always_chars": MAX_BANK_ALWAYS_CHARS,
+    })
+
+
 @app.get("/v1/models")
 async def list_models():
     """模型列表（让客户端不报错）"""
