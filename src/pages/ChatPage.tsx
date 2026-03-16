@@ -319,7 +319,7 @@ const CHAT_PAGE_STYLES = `
 }
 
 .chat-composer {
-  padding: 12px 20px 20px;
+  padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -523,6 +523,8 @@ const CHAT_PAGE_STYLES = `
   .panel-close { display: flex; }
 
   .chat-messages { padding: 16px 12px 12px; }
-  .chat-composer  { padding: 8px 12px 16px; }
+  .chat-composer  { padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .sidebar-header { padding-top: calc(18px + env(safe-area-inset-top, 0px)); }
+  .panel-header   { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
 }
 `

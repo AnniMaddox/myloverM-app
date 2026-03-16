@@ -74,6 +74,10 @@ html, body, #root {
   -moz-osx-font-smoothing: grayscale;
 }
 
+#root {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 button {
   font-family: inherit;
   cursor: pointer;
