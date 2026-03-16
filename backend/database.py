@@ -203,7 +203,7 @@ async def init_tables():
                 sort_order      INTEGER NOT NULL DEFAULT 0,
                 source_ref      TEXT,
                 notes           TEXT,
-                embedding       vector(3072),
+                embedding       vector(1536),
                 content_hash    TEXT,
                 created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
