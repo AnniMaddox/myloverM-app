@@ -988,25 +988,36 @@ async def build_system_prompt_with_memories(
         sections = []
 
         bank_always_lines: list[str] = []
+        bank_always_total = 0
+        bank_always_chars = 0
+        bank_always_skipped = 0
         if bank_always:
-            total_chars = 0
             count = 0
             for item in bank_always:
                 content = str(row_get(item, "content", "") or "").strip()
                 if not content:
                     continue
+                bank_always_total += 1
                 if count >= MAX_BANK_ALWAYS_INJECT:
-                    break
-                if total_chars + len(content) > MAX_BANK_ALWAYS_CHARS:
-                    break
+                    bank_always_skipped += 1
+                    continue
+                if bank_always_chars + len(content) > MAX_BANK_ALWAYS_CHARS:
+                    bank_always_skipped += 1
+                    continue
                 bank_always_lines.append(content)
-                total_chars += len(content)
+                bank_always_chars += len(content)
                 count += 1
         if bank_always_lines:
+            summary = f"[永載銀行：注入 {len(bank_always_lines)} / {bank_always_total} 條・{bank_always_chars} 字"
+            if bank_always_skipped:
+                summary += f"，略過 {bank_always_skipped} 條（超字數或數量上限）]"
+            else:
+                summary += "]"
             sections.append(
                 "【核心記憶（永久）】\n"
                 "（以下為背景記憶，若與最近對話狀態矛盾，以最近對話為準）\n"
                 + "\n".join(bank_always_lines)
+                + "\n" + summary
             )
 
         search_text = user_message
