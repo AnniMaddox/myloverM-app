@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ─── API ─────────────────────────────────────────────────────
 const BACKEND_URL_KEY = 'myloverM-api-base-url';
@@ -50,6 +50,34 @@ interface OpenLoop {
   resolved_at?: string;
 }
 
+interface BankItem {
+  id: number;
+  title: string;
+  category: string;
+  tags: string[];
+  content: string;
+  always_load: boolean;
+  enabled: boolean;
+  sort_order: number;
+  source_ref: string | null;
+  notes: string | null;
+  has_embedding: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BankFormState {
+  title: string;
+  category: string;
+  tags: string;
+  content: string;
+  always_load: boolean;
+  enabled: boolean;
+  sort_order: string;
+  source_ref: string;
+  notes: string;
+}
+
 // ─── Constants ───────────────────────────────────────────────
 const TIER_LABEL: Record<string, string> = {
   ephemeral: '短期',
@@ -62,13 +90,14 @@ const TIER_COLOR: Record<string, string> = {
   evergreen: '#c9953a',
 };
 
-type Tab = 'memories' | 'review' | 'loops' | 'snapshot' | 'backup' | 'guide';
+type Tab = 'memories' | 'review' | 'loops' | 'snapshot' | 'backup' | 'bank' | 'guide';
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'memories', label: '記憶',   icon: '🧠' },
   { key: 'review',   label: '待審',   icon: '✅' },
   { key: 'loops',    label: 'Loops',  icon: '🔄' },
   { key: 'snapshot', label: '快照',   icon: '📸' },
   { key: 'backup',   label: '備份',   icon: '💾' },
+  { key: 'bank',     label: '銀行',   icon: '🏦' },
   { key: 'guide',    label: '說明',   icon: '📖' },
 ];
 
@@ -166,6 +195,7 @@ export default function MemoryPage({ onBack }: Props) {
         {tab === 'loops'     && <LoopsTab />}
         {tab === 'snapshot'  && <SnapshotTab />}
         {tab === 'backup'    && <BackupTab />}
+        {tab === 'bank'      && <BankTab />}
         {tab === 'guide'     && <GuideTab />}
       </div>
     </div>
@@ -1059,7 +1089,340 @@ function SnapshotTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Tab 6 — 說明
+// Tab 6 — 記憶銀行
+// ═══════════════════════════════════════════════════════════
+
+const BANK_CATEGORY_OPTIONS = [
+  { value: 'anchor',       label: 'anchor' },
+  { value: 'personality',  label: 'personality' },
+  { value: 'event',        label: 'event' },
+  { value: 'diary',        label: 'diary' },
+  { value: 'letter',       label: 'letter' },
+  { value: 'conversation', label: 'conversation' },
+  { value: 'general',      label: 'general' },
+];
+
+const EMPTY_BANK_FORM: BankFormState = {
+  title: '', category: 'general', tags: '', content: '',
+  always_load: false, enabled: true, sort_order: '0', source_ref: '', notes: '',
+};
+
+function fmtBankTime(value: string): string {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function previewBankText(content: string, max = 160): string {
+  const t = content.trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+}
+
+function bankFormFromItem(item: BankItem | null): BankFormState {
+  if (!item) return { ...EMPTY_BANK_FORM };
+  return {
+    title: item.title, category: item.category || 'general',
+    tags: (item.tags || []).join(', '), content: item.content,
+    always_load: item.always_load, enabled: item.enabled,
+    sort_order: String(item.sort_order ?? 0), source_ref: item.source_ref ?? '', notes: item.notes ?? '',
+  };
+}
+
+function buildBankPayload(form: BankFormState) {
+  return {
+    title: form.title.trim(), category: form.category,
+    tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
+    content: form.content.trim(), always_load: form.always_load, enabled: form.enabled,
+    sort_order: parseInt(form.sort_order, 10) || 0,
+    source_ref: form.source_ref.trim(), notes: form.notes.trim(),
+  };
+}
+
+function BankTab() {
+  const [items, setItems] = useState<BankItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [alwaysFilter, setAlwaysFilter] = useState<'all' | 'always' | 'ondemand'>('all');
+  const [editingItem, setEditingItem] = useState<BankItem | null>(null);
+  const [form, setForm] = useState<BankFormState>({ ...EMPTY_BANK_FORM });
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  const loadItems = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const params = new URLSearchParams();
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (alwaysFilter !== 'all') params.set('always_load', alwaysFilter === 'always' ? 'true' : 'false');
+      const qs = params.toString();
+      const res = await apiFetch(`/api/memory-bank${qs ? '?' + qs : ''}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setItems(await res.json() as BankItem[]);
+    } catch (err) { setError(err instanceof Error ? err.message : '載入失敗'); }
+    finally { setLoading(false); }
+  }, [alwaysFilter, categoryFilter]);
+
+  useEffect(() => { void loadItems(); }, [loadItems]);
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(item => {
+      const hay = [item.title, item.category, ...(item.tags || []), item.content, item.source_ref || '', item.notes || ''].join('\n').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, query]);
+
+  const alwaysStats = useMemo(() => {
+    const MAX_INJECT = 10, MAX_CHARS = 2000;
+    const alwaysItems = items.filter(i => i.always_load && i.enabled).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    let injected = 0, chars = 0, skipped = 0;
+    for (const item of alwaysItems) {
+      if (injected >= MAX_INJECT) { skipped++; continue; }
+      const c = item.content.length;
+      if (chars + c > MAX_CHARS) { skipped++; continue; }
+      injected++; chars += c;
+    }
+    return { total: alwaysItems.length, injected, chars, skipped };
+  }, [items]);
+
+  function resetEditor() { setEditingItem(null); setForm({ ...EMPTY_BANK_FORM }); setShowForm(false); }
+  function startCreate() { setMessage(''); setEditingItem(null); setForm({ ...EMPTY_BANK_FORM }); setShowForm(true); }
+  function startEdit(item: BankItem) { setMessage(''); setEditingItem(item); setForm(bankFormFromItem(item)); setShowForm(true); }
+
+  async function handleSave() {
+    setSaving(true); setMessage('');
+    try {
+      const payload = buildBankPayload(form);
+      if (editingItem) {
+        const res = await apiFetch(`/api/memory-bank/${editingItem.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setMessage(`已更新：${payload.title}`);
+      } else {
+        const res = await apiFetch('/api/memory-bank', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setMessage(`已新增：${payload.title}`);
+      }
+      resetEditor(); await loadItems();
+    } catch (err) { setMessage(err instanceof Error ? err.message : '保存失敗'); }
+    finally { setSaving(false); }
+  }
+
+  async function handleDelete(item: BankItem) {
+    if (!window.confirm(`刪除「${item.title}」？`)) return;
+    setBusy(`delete-${item.id}`); setMessage('');
+    try {
+      const res = await apiFetch(`/api/memory-bank/${item.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setMessage(`已刪除：${item.title}`);
+      if (editingItem?.id === item.id) resetEditor();
+      await loadItems();
+    } catch (err) { setMessage(err instanceof Error ? err.message : '刪除失敗'); }
+    finally { setBusy(''); }
+  }
+
+  async function handleToggleEnabled(item: BankItem) {
+    setBusy(`toggle-${item.id}`); setMessage('');
+    try {
+      const res = await apiFetch(`/api/memory-bank/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !item.enabled }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadItems();
+    } catch (err) { setMessage(err instanceof Error ? err.message : '更新失敗'); }
+    finally { setBusy(''); }
+  }
+
+  async function handleExport() {
+    setBusy('export'); setMessage('');
+    try {
+      const res = await apiFetch('/api/memory-bank/export');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = await res.json();
+      const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `memory-bank-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+      URL.revokeObjectURL(url); setMessage('已匯出 JSON');
+    } catch (err) { setMessage(err instanceof Error ? err.message : '匯出失敗'); }
+    finally { setBusy(''); }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return; e.target.value = '';
+    setBusy('import'); setMessage('');
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!Array.isArray(parsed)) throw new Error('請選擇 JSON 陣列格式的檔案');
+      const res = await apiFetch('/api/memory-bank/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed) });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d?.error ?? `HTTP ${res.status}`); }
+      const result = await res.json() as { imported: number; skipped: number };
+      setMessage(`已匯入 ${result.imported} 筆${result.skipped ? `，略過 ${result.skipped} 筆` : ''}`);
+      await loadItems();
+    } catch (err) { setMessage(err instanceof Error ? err.message : '匯入失敗'); }
+    finally { setBusy(''); }
+  }
+
+  async function handleReembed() {
+    if (!window.confirm('重算全部 embedding 會跑一陣子，要繼續嗎？')) return;
+    setBusy('reembed'); setMessage('');
+    try {
+      const res = await apiFetch('/api/memory-bank/reembed-all', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = await res.json() as { updated: number };
+      setMessage(`已重算 ${result.updated} 筆 embedding`);
+      await loadItems();
+    } catch (err) { setMessage(err instanceof Error ? err.message : '重算失敗'); }
+    finally { setBusy(''); }
+  }
+
+  return (
+    <div className="mem-section" style={{ display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input className="mem-input" style={{ flex: '1 1 180px' }} placeholder="搜尋標題 / tag / 內容" value={query} onChange={e => setQuery(e.target.value)} />
+        <select className="mem-input" style={{ width: 140 }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+          <option value="">全部分類</option>
+          {BANK_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select className="mem-input" style={{ width: 120 }} value={alwaysFilter} onChange={e => setAlwaysFilter(e.target.value as 'all' | 'always' | 'ondemand')}>
+          <option value="all">全部</option>
+          <option value="always">永載</option>
+          <option value="ondemand">按需</option>
+        </select>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="mem-pill-btn" onClick={loadItems} disabled={loading}>{loading ? '載入中…' : '重整'}</button>
+        <button className="mem-pill-btn" onClick={() => { if (showForm && !editingItem) { resetEditor(); } else { startCreate(); } }}>
+          {showForm && !editingItem ? '收起' : '新增'}
+        </button>
+        <button className="mem-pill-btn" onClick={handleExport} disabled={busy !== ''}>{busy === 'export' ? '匯出中…' : '匯出 JSON'}</button>
+        <button className="mem-pill-btn" onClick={() => importFileRef.current?.click()} disabled={busy !== ''}>{busy === 'import' ? '匯入中…' : '匯入 JSON'}</button>
+        <input ref={importFileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportFile} />
+        <button className="mem-pill-btn" onClick={handleReembed} disabled={busy !== ''}>{busy === 'reembed' ? '重算中…' : '重算向量'}</button>
+      </div>
+
+      {alwaysStats.total > 0 && (
+        <div style={{
+          fontSize: 12, padding: '6px 10px', borderRadius: 6,
+          background: alwaysStats.skipped > 0 ? 'rgba(255,100,80,0.12)' : 'rgba(80,180,120,0.10)',
+          border: `1px solid ${alwaysStats.skipped > 0 ? 'rgba(255,100,80,0.3)' : 'rgba(80,180,120,0.25)'}`,
+          color: alwaysStats.skipped > 0 ? '#ff8070' : '#80d4a0',
+        }}>
+          永載預覽：{alwaysStats.injected} / {alwaysStats.total} 條注入・{alwaysStats.chars} / 2000 字
+          {alwaysStats.skipped > 0 && `・⚠️ ${alwaysStats.skipped} 條被截（超字數上限）`}
+        </div>
+      )}
+
+      {message && (
+        <div style={{ fontSize: 13, padding: '6px 10px', borderRadius: 6, background: message.includes('失敗') || message.includes('錯') ? 'rgba(255,80,80,0.12)' : 'rgba(80,200,120,0.10)', color: message.includes('失敗') || message.includes('錯') ? '#ff7070' : '#70d090' }}>
+          {message}
+        </div>
+      )}
+      {error && <div style={{ fontSize: 13, padding: '6px 10px', borderRadius: 6, background: 'rgba(255,80,80,0.12)', color: '#ff7070' }}>{error}</div>}
+
+      {showForm && (
+        <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#d4a46a' }}>{editingItem ? `編輯 #${editingItem.id}` : '新增項目'}</span>
+            <button className="mem-pill-btn" onClick={resetEditor}>收起</button>
+          </div>
+          <input className="mem-input" placeholder="標題" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+          <select className="mem-input" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
+            {BANK_CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <input className="mem-input" placeholder="tags，用逗號分隔" value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))} />
+          <textarea className="mem-input" style={{ minHeight: 140, resize: 'vertical' }} placeholder="完整原文" value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} />
+          <input className="mem-input" placeholder="source_ref" value={form.source_ref} onChange={e => setForm(p => ({ ...p, source_ref: e.target.value }))} />
+          <textarea className="mem-input" style={{ minHeight: 70, resize: 'vertical' }} placeholder="notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+              <input type="checkbox" checked={form.always_load} onChange={e => setForm(p => ({ ...p, always_load: e.target.checked }))} />
+              永載
+            </label>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+              <input type="checkbox" checked={form.enabled} onChange={e => setForm(p => ({ ...p, enabled: e.target.checked }))} />
+              啟用
+            </label>
+            <input className="mem-input" style={{ width: 100 }} placeholder="sort_order" value={form.sort_order} onChange={e => setForm(p => ({ ...p, sort_order: e.target.value }))} />
+          </div>
+          <button className="mem-pill-btn" onClick={handleSave} disabled={saving || !form.title.trim() || !form.content.trim()}>
+            {saving ? '保存中…' : editingItem ? '更新項目' : '新增項目'}
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        {filteredItems.length === 0 && !loading && (
+          <p style={{ margin: 0, fontSize: 13, color: 'rgba(240,232,216,0.45)', textAlign: 'center', padding: '20px 0' }}>目前沒有符合條件的素材。</p>
+        )}
+        {filteredItems.map(item => (
+          <div key={item.id} style={{
+            display: 'grid', gap: 6, padding: 12, borderRadius: 8,
+            background: item.enabled && item.always_load ? 'rgba(212,164,106,0.08)' : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${item.enabled && item.always_load ? 'rgba(212,164,106,0.35)' : 'rgba(255,255,255,0.08)'}`,
+            opacity: item.enabled ? 1 : 0.38,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+                  <strong style={{ color: item.enabled && item.always_load ? '#d4a46a' : '#f0e8d8' }}>{item.title}</strong>
+                  <BankTag text={item.category} />
+                  <BankTag text={item.always_load ? 'always' : 'ondemand'} muted />
+                  <BankTag text={item.enabled ? 'enabled' : 'disabled'} muted={!item.enabled} />
+                  <BankTag text={item.has_embedding ? 'vec' : 'no-vec'} muted />
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(item.tags || []).map(tag => <BankTag key={tag} text={tag} muted />)}
+                </div>
+              </div>
+              <span style={{ fontSize: 11, color: 'rgba(240,232,216,0.45)', whiteSpace: 'nowrap' }}>{fmtBankTime(item.updated_at)}</span>
+            </div>
+            <p style={{ margin: 0, color: 'rgba(240,232,216,0.7)', fontSize: 13, lineHeight: 1.6 }}>
+              {previewBankText(item.content)}
+            </p>
+            {(item.source_ref || item.notes) && (
+              <div style={{ fontSize: 12, color: 'rgba(240,232,216,0.45)', display: 'grid', gap: 2 }}>
+                {item.source_ref && <span>source: {item.source_ref}</span>}
+                {item.notes && <span>notes: {previewBankText(item.notes, 80)}</span>}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="mem-pill-btn" onClick={() => startEdit(item)}>編輯</button>
+              <button className="mem-pill-btn" onClick={() => handleToggleEnabled(item)} disabled={busy === `toggle-${item.id}`}>
+                {busy === `toggle-${item.id}` ? '處理中…' : item.enabled ? '停用' : '啟用'}
+              </button>
+              <button className="mem-pill-btn" onClick={() => handleDelete(item)} disabled={busy === `delete-${item.id}`}>
+                {busy === `delete-${item.id}` ? '刪除中…' : '刪除'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BankTag({ text, muted = false }: { text: string; muted?: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 999,
+      fontSize: 11, lineHeight: 1.5,
+      background: muted ? 'rgba(255,255,255,0.04)' : 'rgba(212,164,106,0.14)',
+      color: muted ? 'rgba(240,232,216,0.45)' : '#d4a46a',
+      border: '1px solid rgba(255,255,255,0.08)',
+    }}>
+      {text}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// Tab 7 — 說明
 // ═══════════════════════════════════════════════════════════
 function GuideTab() {
   const tierColorMap = { ephemeral: '#888', stable: '#5b8dd9', evergreen: '#c9953a' };
