@@ -2846,12 +2846,10 @@ async def restore_full(request: Request):
             )
             loop_imported += 1
 
-        # ── 3. Snapshots（只還原 saved_as_card=TRUE 的）───────────
+        # ── 3. Checkpoints（全部以 saved_as_card=TRUE 還原，供 Snapshot 召回）
         snap_imported = snap_skipped = 0
         pool = await get_pool()
         for cp in checkpoints_in:
-            if not cp.get("saved_as_card"):
-                continue
             summary = (cp.get("summary_text") or "").strip()
             if not summary:
                 continue
