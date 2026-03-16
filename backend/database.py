@@ -63,9 +63,15 @@ async def close_pool():
 
 async def init_tables():
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
+    # ── 先單獨裝 pgvector（失敗不影響主表建立）──
+    try:
+        async with pool.acquire() as ext_conn:
+            await ext_conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+    except Exception:
+        print("⚠️  pgvector 擴充套件不可用，向量搜尋功能將停用")
+
+    async with pool.acquire() as conn:
         await conn.execute(
             """
             CREATE TABLE IF NOT EXISTS conversations (
@@ -203,7 +209,6 @@ async def init_tables():
                 sort_order      INTEGER NOT NULL DEFAULT 0,
                 source_ref      TEXT,
                 notes           TEXT,
-                embedding       vector(1536),
                 content_hash    TEXT,
                 created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -303,14 +308,6 @@ async def init_tables():
             ON memory_bank(enabled, sort_order, updated_at DESC);
             """
         )
-        await conn.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_memory_bank_embedding
-            ON memory_bank
-            USING hnsw (embedding vector_cosine_ops);
-            """
-        )
-
         # session_state — 追蹤每個 session 的 extraction cursor
         await conn.execute(
             """
@@ -390,7 +387,6 @@ async def init_tables():
                 id                    SERIAL PRIMARY KEY,
                 session_id            TEXT NOT NULL,
                 chunk_text            TEXT NOT NULL,
-                embedding             vector(1536),
                 message_ids           INTEGER[] DEFAULT '{}',
                 days_old_at_vectorize REAL,
                 created_at            TIMESTAMPTZ DEFAULT NOW(),
@@ -404,15 +400,34 @@ async def init_tables():
             ON conversation_vectors (session_id);
             """
         )
-        await conn.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_conv_vectors_embedding
-            ON conversation_vectors USING hnsw (embedding vector_cosine_ops)
-            WHERE embedding IS NOT NULL;
-            """
-        )
-
     print("✅ 数据库表结构已就绪")
+
+    # ── 向量欄位與索引（需要 pgvector，裝不上就略過）──
+    try:
+        async with pool.acquire() as vec_conn:
+            await vec_conn.execute(
+                "ALTER TABLE memory_bank ADD COLUMN IF NOT EXISTS embedding vector(1536);"
+            )
+            await vec_conn.execute(
+                "ALTER TABLE conversation_vectors ADD COLUMN IF NOT EXISTS embedding vector(1536);"
+            )
+            await vec_conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_memory_bank_embedding
+                ON memory_bank
+                USING hnsw (embedding vector_cosine_ops);
+                """
+            )
+            await vec_conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_conv_vectors_embedding
+                ON conversation_vectors USING hnsw (embedding vector_cosine_ops)
+                WHERE embedding IS NOT NULL;
+                """
+            )
+            print("✅ 向量欄位與索引已就緒")
+    except Exception as e:
+        print(f"⚠️ 向量欄位不可用（pgvector 未安裝），embedding 功能停用：{e}")
 
 
 # ============================================================
